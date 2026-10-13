@@ -113,4 +113,4 @@ Copyright 2026 thePlannerIvan / 阿祖不看 TVC。AGPL-3.0-only，见 LICENSE �
 
 作者：阿祖不看 TVC · [demyth.info](https://demyth.info) · Lawyif@163.com
 
-开发说明：仓库有意保留 `node_modules` 中经过锁定的生产依赖及许可证，以支持 DSH 从 GitHub 直接安装。更新依赖后，将其变化与 `package-lock.json` 一起提交，并运行源码归档导入测试。测试读取 Git 暂存区的待发布文件；修改后先 `git add` 再运行测试。
+开发说明：仓库有意保留 `node_modules` 中经过锁定的生产依赖及许可证，以支持 DSH 从 GitHub 直接安装。更新依赖后先运行 `node scripts/prepare-bundled-deps.mjs`（Git 安装不会保留链接形式的内置依赖），然后将其变化与 `package-lock.json` 一起提交，并运行源码归档导入测试。测试读取 Git 暂存区的待发布文件；修改后先 `git add` 再运行测试。

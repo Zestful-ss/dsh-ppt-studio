@@ -9,7 +9,7 @@
 !/node_modules/@isaacs/
 /node_modules/@isaacs/*
 !/node_modules/@isaacs/fs-minipass/
-!/node_modules/dsh-review-dock
+!/node_modules/dsh-review-dock/
 *.tgz
 artifacts/
 .env
