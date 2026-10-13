@@ -9,3 +9,6 @@ See vendor/review-dock/NOTICE and LICENSE.
 
 The icon uses the non-serif geometric Logics design from logics-branding.
 Inter font licensing is preserved in assets/inter-OFL.txt.
+
+Production dependencies are intentionally included for build-free GitHub installation.
+Each dependency retains its own license in node_modules/<package>/LICENSE*.

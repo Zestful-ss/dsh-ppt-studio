@@ -6,11 +6,20 @@ DSH 设置中的 Planners 套件管理。安装所需 Skill、准备公共依赖
 
 ## 从 GitHub 安装
 
+DSH 的“添加插件”窗口支持直接填写 GitHub 仓库地址：
+
+```text
+https://github.com/thePlannerIvan/planners-form
+```
+
+不要填写 Release 展示页（`/releases/tag/...`）；如果使用 Release，必须填写 `.tgz` 安装包的直链。源码仓库和 Release 安装包都包含完整插件依赖，无需额外构建或批准安装脚本。
+
+
 **兼容版本：DSH `0.2.0-rc.2`。** 两个 `0.2.1-alpha` 尚未完成运行验证。
 
 ### 桌面版
 
-1. 打开 [最新发行版](https://github.com/thePlannerIvan/planners-form/releases/latest)，下载 **`planners-form-0.1.1.tgz`**（不要下载 GitHub 自动生成的 Source code 压缩包）。
+1. 打开 [最新发行版](https://github.com/thePlannerIvan/planners-form/releases/latest)，下载 **`planners-form-0.1.2.tgz`**（不要下载 GitHub 自动生成的 Source code 压缩包）。
 2. 在 DSH 的插件管理器中添加这个 `.tgz` 文件的绝对路径。
 3. 安装后打开 **设置 → Planners Form**，选择需要的 Skill。回到对话中按页面显示的 Skill 名称调用。
 
@@ -19,18 +28,18 @@ DSH 设置中的 Planners 套件管理。安装所需 Skill、准备公共依赖
 已安装 DSH `0.2.0-rc.2` 的用户可以直接安装 GitHub Release 包：
 
 ```sh
-dsh plugin --profile web add https://github.com/thePlannerIvan/planners-form/releases/download/v0.1.1/planners-form-0.1.1.tgz
+dsh plugin --profile web add https://github.com/thePlannerIvan/planners-form/releases/download/v0.1.2/planners-form-0.1.2.tgz
 ```
 
 也可以下载后使用本地绝对路径安装：
 
 ```sh
-dsh plugin --profile web add /absolute/path/planners-form-0.1.1.tgz
+dsh plugin --profile web add /absolute/path/planners-form-0.1.2.tgz
 ```
 
 桌面版由应用托管 profile，请使用应用的插件管理器。安装包包含 Review Dock 与 Node 包解析依赖。首次启动自动准备审阅核心；安装配套 Skill 时再下载其公共依赖。GitHub 与 PyPI 下载需要可用网络。Node 使用 DSH 自己的运行环境。
 
-发行版同时提供 `SHA256SUMS`。macOS 可用 `shasum -a 256 planners-form-0.1.1.tgz`，Linux 可用 `sha256sum planners-form-0.1.1.tgz`，与校验文件核对。
+发行版同时提供 `SHA256SUMS`。macOS 可用 `shasum -a 256 planners-form-0.1.2.tgz`，Linux 可用 `sha256sum planners-form-0.1.2.tgz`，与校验文件核对。
 
 ## 已提供
 
@@ -73,7 +82,6 @@ skills/
 ```sh
 git clone https://github.com/thePlannerIvan/planners-form.git
 cd planners-form
-npm ci --legacy-peer-deps
 npm test
 npm run check
 npm pack
@@ -104,3 +112,5 @@ Copyright 2026 thePlannerIvan / 阿祖不看 TVC。AGPL-3.0-only，见 LICENSE �
 使用问题和缺陷请提交 [GitHub Issue](https://github.com/thePlannerIvan/planners-form/issues)，注明 DSH 版本、操作系统和复现步骤。请移除凭据和私人项目内容；安全问题按 [SECURITY.md](SECURITY.md) 私下联系。
 
 作者：阿祖不看 TVC · [demyth.info](https://demyth.info) · Lawyif@163.com
+
+开发说明：仓库有意保留 `node_modules` 中经过锁定的生产依赖及许可证，以支持 DSH 从 GitHub 直接安装。更新依赖后，将其变化与 `package-lock.json` 一起提交，并运行源码归档导入测试。测试读取 Git 暂存区的待发布文件；修改后先 `git add` 再运行测试。

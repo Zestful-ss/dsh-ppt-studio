@@ -32,8 +32,12 @@ No alpha binary was executed. The release manifest deliberately declares exactly
 
 ## Additional checks and limits
 
-25 automated tests cover the install/update manager, archive extraction, external installation preservation, dependency closure, recovery after interruption, and authenticated HTTP handling. Earlier UI development also ran on DSH 0.1.7-rc.1; that version is not in this release's supported range.
+26 automated tests cover the install/update manager, archive extraction, external installation preservation, dependency closure, recovery after interruption, and authenticated HTTP handling. Earlier UI development also ran on DSH 0.1.7-rc.1; that version is not in this release's supported range.
 
 Initial direct GitHub/npm connections failed with TLS errors. The subsequent 0.1.1 verification successfully accessed all five newly public repositories without authentication and installed the actual proposal, bypage and video dependency closure in an empty DSH_HOME (11 Skills). Companion Skill mounts and frontmatter identifiers were checked. The plugin archive bundles its Node dependencies. PPT Python/browser provisioning, Video Craft rendering tools, native desktop plugin-manager installation, and Windows still require separate validation.
 
 The 0.1.1 catalog pins the five newly public repositories to audited commits. Settings hides `sparkling`, `storytelling` and `slide-copy` in both lists, while dependency installation and updates still include them.
+
+## 0.1.2 Git installation fix
+
+0.1.1 Release-package checks did not cover Git source installation. The source archive lacked dependencies marked as bundled, causing entry import failure. 0.1.2 includes the production dependencies and adds a Git archive import test without inherited developer dependencies.

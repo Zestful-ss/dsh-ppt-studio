@@ -1,6 +1,6 @@
 {
   "name": "planners-form",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "DSH 设置中的 Planners 套件管理：环境准备、Skill 选装与更新。",
   "type": "module",
   "main": "lib/index.js",
@@ -28,8 +28,8 @@
     "check": "node --check lib/index.js && node --check lib/manager.js && node --check lib/client.js"
   },
   "dependencies": {
-    "tar": "7.5.11",
-    "dsh-review-dock": "file:vendor/review-dock"
+    "dsh-review-dock": "file:vendor/review-dock",
+    "tar": "7.5.22"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh": "0.2.0-rc.2"
@@ -48,10 +48,6 @@
   },
   "author": "thePlannerIvan <Lawyif@163.com>",
   "license": "AGPL-3.0-only",
-  "bundleDependencies": [
-    "tar",
-    "dsh-review-dock"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/thePlannerIvan/planners-form.git"
@@ -67,5 +63,9 @@
     "skills",
     "planners",
     "review"
+  ],
+  "bundleDependencies": [
+    "tar",
+    "dsh-review-dock"
   ]
 }
