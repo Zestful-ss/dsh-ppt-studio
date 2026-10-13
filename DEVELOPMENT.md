@@ -1,0 +1,47 @@
+# 开发与安装参考
+
+面向使用者的介绍和安装步骤见 [README](README.md)。
+
+## 安装位置与更新
+
+以 `$DSH_HOME` 为准，默认 `~/.dsh`：
+
+```text
+planners-form/
+  skills/          管理的 Skill 与依赖
+  python/          PPT 的独立 Python 环境
+  state.json       安装版本
+  install.lock     安装互斥
+  journal.json     未完成事务恢复记录（完成后移除）
+skills/
+  <skill-name>     指向受管理 Skill 的链接，供 DSH 发现
+```
+
+现有同名目录或链接视为外部安装，不覆盖、不接管。公共外部模块会建立只读使用的链接，供受管理 Skill 找到兄弟依赖。
+
+初次安装使用 `catalog.json` 固定提交。检查更新查询上游主分支，用户点击更新后采用查询到的具体提交；**这表示上游更新，不表示整套兼容认证**。建议在任务空闲时更新，已有 Agent 上下文不会被重写。
+
+更新不访问项目目录。安装失败会恢复先前 Skill 文件与状态；Python 环境安装是独立准备步骤，失败可重试，不回滚 pip 缓存。
+
+## 开发与验证
+
+```sh
+git clone https://github.com/thePlannerIvan/planners-form.git
+cd planners-form
+npm test
+npm run check
+npm pack
+```
+
+`test/` 使用隔离目录和合成仓库包，覆盖真实 tar 解包、下载失败、依赖安装、更新、外部目录保护、事务恢复和请求来源校验。
+
+## 当前验证边界
+
+正式兼容目标为 **DSH 0.2.0-rc.2**。已使用桌面应用内置的该版本运行时及 Node 24.21.0，在全新隔离 Web profile 中通过官方命令安装发行包，并验证设置栏目、Skill 调用名、环境修复接口及 Review Bridge。此前也做过 0.1.7-rc.1 开发验证，但发行包仅声明 rc.2。
+
+已核对官方存在 0.2.1-alpha.1 / 0.2.1-alpha.2，设置扩展契约相同；尚未进行完整运行测试，因此没有在版本范围里宣称支持 alpha。
+
+已完成公开仓库的匿名访问和真实 Skill 下载、依赖安装及 DSH 链接检查。PPT 的 Python / Chromium 配置、视频渲染工具配置，以及桌面版和 Windows 完整安装仍需分别实测。
+
+
+开发说明：仓库有意保留 `node_modules` 中经过锁定的生产依赖及许可证，以支持 DSH 从 GitHub 直接安装。更新依赖后先运行 `node scripts/prepare-bundled-deps.mjs`（Git 安装不会保留链接形式的内置依赖），然后将其变化与 `package-lock.json` 一起提交，并运行源码归档导入测试。测试读取 Git 暂存区的待发布文件；修改后先 `git add` 再运行测试。
