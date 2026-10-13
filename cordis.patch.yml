@@ -1,3 +1,7 @@
 - insert:
+    - id: planners-form-local-skills
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: planners-form-local
     - id: planners-form
       name: planners-form

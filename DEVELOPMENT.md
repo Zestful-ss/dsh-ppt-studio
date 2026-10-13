@@ -17,7 +17,9 @@ skills/
   <skill-name>     指向受管理 Skill 的链接，供 DSH 发现
 ```
 
-现有同名目录或链接视为外部安装，不覆盖、不接管。公共外部模块会建立只读使用的链接，供受管理 Skill 找到兄弟依赖。
+设置页读取 DSH `skills.snapshot()` 的有效清单，按 Skill 名称与实际资源目录识别已有安装，支持宿主注册的自定义目录。插件通过 DSH 原生 `FileSystemSkillProvider` 注册本地来源（`$DSH_HOME/skills` 与 `$DSH_AGENTS_HOME/skills`，后者默认 `~/.agents/skills`），使新安装即使在默认文件来源被关闭时也能被本地 Agent 发现；安装成功会立即失效化清单缓存。项目或特定 Agent 私有作用域的 Skill 不作为全局安装显示。
+
+有效的外部 Skill 不覆盖、不接管；没有有效 Skill 的同名目录会提示冲突。公共外部模块会建立只读使用的链接，供受管理 Skill 找到兄弟依赖。
 
 初次安装使用 `catalog.json` 固定提交。检查更新查询上游主分支，用户点击更新后采用查询到的具体提交；**这表示上游更新，不表示整套兼容认证**。建议在任务空闲时更新，已有 Agent 上下文不会被重写。
 

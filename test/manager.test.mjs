@@ -24,3 +24,33 @@ test('external shared dependencies are visible beside managed skills',async t=>{
 test('cached checks do not re-fetch; explicit checks do',async t=>{let calls=0;const m=await fixture(t,{fetcher:async()=>{calls++;return new Response(JSON.stringify({sha:b}));}});await m.checkUpdates(false);const before=calls;await m.checkUpdates(false);assert.equal(calls,before);await m.checkUpdates(true);assert.equal(calls,before*2);});
 test('real tar download extracts matching Skill and excludes secrets',async t=>{const m=await fixture(t);const {create}=await import('tar');const src=join(m.home,'archive-root');await mkdir(join(src,'bundle'),{recursive:true});await writeFile(join(src,'bundle','SKILL.md'),'---\nname: core\ndescription: test\n---\nHello');await writeFile(join(src,'bundle','.env'),'not-shipped');const file=join(m.home,'fixture.tgz');await create({cwd:src,gzip:true,file},['bundle']);const data=await readFile(file),dest=join(m.home,'download');await downloadPackage(pkg('core'),dest,async()=>new Response(data));assert.match(await readFile(join(dest,'SKILL.md'),'utf8'),/Hello/);await assert.rejects(lstat(join(dest,'.env')),{code:'ENOENT'});});
 test('real tar rejects symlinks rather than following them',async t=>{const m=await fixture(t);const {create}=await import('tar');const src=join(m.home,'archive-root');await mkdir(join(src,'bundle'),{recursive:true});await symlink('/tmp',join(src,'bundle','outside'));const file=join(m.home,'fixture.tgz');await create({cwd:src,gzip:true,file},['bundle']);const data=await readFile(file);await assert.rejects(downloadPackage(pkg('core'),join(m.home,'download'),async()=>new Response(data)),/不支持/);});
+test('uses registry names and resource paths from arbitrary DSH roots without copying external skills',async t=>{
+ const m=await fixture(t);const external=join(m.home,'library','category','different-folder');await mkdir(external,{recursive:true});await writeFile(join(external,'SKILL.md'),'user content');
+ m.discover=async()=>[{name:'feature',resourceBase:{kind:'directory',path:external}}];
+ assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'external');
+ assert.equal((await run(m,'install',['feature'])).state,'done');
+ assert.equal(await readlink(join(m.skills,'feature')),external);
+ await assert.rejects(lstat(join(m.mounts,'feature')),{code:'ENOENT'});
+ assert.equal(await readFile(join(external,'SKILL.md'),'utf8'),'user content');
+});
+test('realpath aliases from DSH discovery remain managed and updateable',async t=>{
+ const m=await fixture(t);await run(m,'install',['feature']);
+ const alias=join(m.home,'alias');await symlink(m.skills,alias);
+ m.discover=async()=>[{name:'feature',path:join(alias,'feature','SKILL.md')}];
+ assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'managed');
+});
+test('discovery errors stop install rather than duplicating unseen external skills',async t=>{
+ const m=await fixture(t,{discover:async()=>{throw Error('discovery unavailable');}});
+ assert.equal((await run(m,'install',['feature'])).state,'error');
+ assert.match(m.job.message,/discovery unavailable/);assert.deepEqual((await m.state()).installed,{});
+});
+test('directory without SKILL.md is not shown installed and is not overwritten',async t=>{
+ const m=await fixture(t);await mkdir(join(m.mounts,'feature'),{recursive:true});await writeFile(join(m.mounts,'feature','keep.txt'),'keep');
+ assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'absent');
+ assert.equal((await run(m,'install',['feature'])).state,'error');
+ assert.equal(await readFile(join(m.mounts,'feature','keep.txt'),'utf8'),'keep');
+});
+test('successful installs invalidate the DSH catalog immediately',async t=>{
+ let invalidations=0;const m=await fixture(t,{invalidateSkills:()=>invalidations++});
+ await run(m,'install',['feature']);assert.equal(invalidations,1);
+});

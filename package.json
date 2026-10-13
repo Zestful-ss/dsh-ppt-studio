@@ -1,6 +1,6 @@
 {
   "name": "planners-form",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "DSH 设置中的 Planners 套件管理：环境准备、Skill 选装与更新。",
   "type": "module",
   "main": "lib/index.js",

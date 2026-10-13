@@ -23,3 +23,12 @@ test('settings renders invocation names but hides companion rows in both lists',
  for(const id of ['sparkling','storytelling','slide-copy'])assert.ok(!tree.includes(id));
  for(const id of ['planners-proposal-system','planners-bypage','video-idea-system','video-craft'])assert.ok(tree.includes(id));
 });
+test('installed rows show an accessible checkmark instead of a disabled checkbox',async()=>{
+ const {runInNewContext}=await import('node:vm');let plugin,hook=0;
+ const data={packages:[{id:'existing',title:'已有能力',ownership:'external'},{id:'managed',title:'托管能力',ownership:'managed'},{id:'new',title:'新能力',ownership:'absent',available:true}],environment:{node:'24',pythonReady:false}};
+ const React={createElement:(type,props,...children)=>({type,props,children}),useState:initial=>[hook++===0?data:initial,()=>{}],useRef:current=>({current}),useEffect:()=>{}};
+ runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,window:{location:{href:'http://localhost/'}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
+ const nodes=[];function visit(x){if(!x||typeof x!=='object')return;if(Array.isArray(x)){x.forEach(visit);return;}nodes.push(x);x.children?.forEach(visit);}visit(plugin.Page());
+ assert.equal(nodes.filter(n=>n.props?.role==='img'&&n.children.includes('✅')).length,2);
+ assert.equal(nodes.filter(n=>n.type==='input'&&n.props.type==='checkbox').length,1);
+});

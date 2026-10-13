@@ -41,3 +41,7 @@ The 0.1.1 catalog pins the five newly public repositories to audited commits. Se
 ## 0.1.2 Git installation fix
 
 0.1.1 Release-package checks did not cover Git source installation. The source archive lacked dependencies marked as bundled, causing entry import failure. 0.1.2 includes the production dependencies and adds a Git archive import test without inherited developer dependencies.
+
+## 0.1.3 Skill discovery fix
+
+Settings now uses the DSH skill registry rather than a single hardcoded directory. A native filesystem provider makes local DSH/Agent roots visible even when the profile disables its default provider. The rc.2 integration test covers custom-root discovery, an overridden agents home, existing-install preservation, and immediate loading of a freshly installed Skill through the actual registry. Installed rows display ✅; Review Dock resolves the discovered core location. Project/preset-private Skills are not presented as global installations.
