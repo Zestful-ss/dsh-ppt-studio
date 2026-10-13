@@ -1,0 +1,223 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-13T08:20:20.244398+00:00",
+  "packages": [
+    {
+      "id": "planners-review-core",
+      "title": "审阅核心",
+      "description": "公共审阅通信与页面宿主",
+      "dependencies": [],
+      "internal": true,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-review-core",
+      "revision": "e02194a058ef52a27f9f0fed9c42f44f95311305",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-source-index",
+      "title": "来源索引",
+      "description": "保存资料来源与定位",
+      "dependencies": [],
+      "internal": true,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-source-index",
+      "revision": "8433569e49c94cd0f5eab599eade00988a5a858e",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-report-kit",
+      "title": "报告装配",
+      "description": "统一生成离线报告",
+      "dependencies": [],
+      "internal": true,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-report-kit",
+      "revision": "6501b19eff1860d436e14db7fc135e177bddcdd7",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-fact-check",
+      "title": "事实核查",
+      "description": "检查事实与来源的一致性",
+      "dependencies": [
+        "planners-source-index"
+      ],
+      "internal": true,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-fact-check",
+      "revision": "16a6af13507bebc4b41b1b4d172e6394e6cd0511",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-method-wiki",
+      "title": "方法库",
+      "description": "共享策略与研究方法",
+      "dependencies": [],
+      "internal": true,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-method-wiki",
+      "revision": "2687492518d632f3bc5327f4f97c4bb7aa779363",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-ppt-hell",
+      "title": "PPT 制作",
+      "description": "从材料生成可编辑 PPT",
+      "dependencies": [
+        "planners-review-core",
+        "planners-source-index",
+        "planners-fact-check",
+        "planners-report-kit"
+      ],
+      "internal": false,
+      "runtime": "ppt",
+      "repository": "thePlannerIvan/planners-ppt-hell",
+      "revision": "7fd3213b2962cc114b3e5ca9acf2cbc2474be89a",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-proposal-system",
+      "title": "策略提案",
+      "description": "共创策略判断与方案结构",
+      "dependencies": [
+        "planners-review-core",
+        "planners-source-index",
+        "planners-method-wiki",
+        "sparkling",
+        "storytelling",
+        "slide-copy"
+      ],
+      "internal": false,
+      "runtime": null,
+      "repository": "thePlannerIvan/Planners-Proposal-System",
+      "revision": "58069eaa896b3f3f8ce3de7374afc3a5e1cf5b94",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-bypage",
+      "title": "逐页内容",
+      "description": "展开逐页文案、素材与来源",
+      "dependencies": [
+        "planners-review-core",
+        "planners-source-index",
+        "planners-fact-check",
+        "planners-method-wiki",
+        "storytelling",
+        "slide-copy"
+      ],
+      "internal": false,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-bypage",
+      "revision": "c5135c694e462c36c0f609665fca4e8ae4e6bfc7",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-quali-box",
+      "title": "定性分析",
+      "description": "分析访谈与开放文本",
+      "dependencies": [
+        "planners-source-index",
+        "planners-report-kit"
+      ],
+      "internal": false,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-quali-box",
+      "revision": "eaa6e3aedcda87488c75ac0b8b932a1513c0008b",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "planners-quanti-box",
+      "title": "定量分析",
+      "description": "分析结构化数据并生成报告",
+      "dependencies": [
+        "planners-source-index",
+        "planners-report-kit"
+      ],
+      "internal": false,
+      "runtime": null,
+      "repository": "thePlannerIvan/planners-quanti-box",
+      "revision": "c9bf545de508d2f43432a30bfd094ba5bbfbfdaf",
+      "channel": "main",
+      "available": true
+    },
+    {
+      "id": "video-idea-system",
+      "title": "视频创意",
+      "description": "从核心洞察到可录口播与念稿审阅",
+      "dependencies": [
+        "planners-review-core",
+        "planners-source-index"
+      ],
+      "internal": false,
+      "available": true,
+      "repository": "thePlannerIvan/video-idea-system",
+      "revision": "3fb503342e0796b53cecf7199a33e601e76bb439",
+      "channel": "main",
+      "runtime": null,
+      "hidden": false
+    },
+    {
+      "id": "video-craft",
+      "title": "视频制作",
+      "description": "剪辑、字幕与成片审阅；渲染工具按安装文档配置",
+      "dependencies": [
+        "planners-review-core"
+      ],
+      "internal": false,
+      "available": true,
+      "repository": "thePlannerIvan/video-craft",
+      "revision": "8458c4ad105c2d8dc380085bf26610c634b56ca2",
+      "channel": "main",
+      "runtime": null,
+      "hidden": false
+    },
+    {
+      "id": "slide-copy",
+      "title": "幻灯片文案",
+      "description": "页面角色、标题链与文案规范",
+      "dependencies": [],
+      "internal": true,
+      "available": true,
+      "repository": "thePlannerIvan/slide-copy",
+      "revision": "893bca7ff1269ddf63c1ac41339735db5ed3b937",
+      "channel": "main",
+      "runtime": null,
+      "hidden": true
+    },
+    {
+      "id": "storytelling",
+      "title": "叙事方法",
+      "description": "组织叙事推进与认知节奏",
+      "dependencies": [],
+      "internal": true,
+      "available": true,
+      "repository": "thePlannerIvan/storytelling",
+      "revision": "99dfc27f140ccc02d6ea2593829458e8c1d39213",
+      "channel": "main",
+      "runtime": null,
+      "hidden": true
+    },
+    {
+      "id": "sparkling",
+      "title": "策略研讨",
+      "description": "围绕材料共创业务判断",
+      "dependencies": [],
+      "internal": true,
+      "available": true,
+      "repository": "thePlannerIvan/sparkling",
+      "revision": "0c34f2451be5494e322d3698eb846f8701333676",
+      "channel": "main",
+      "runtime": null,
+      "hidden": true
+    }
+  ]
+}

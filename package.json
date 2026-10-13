@@ -1,0 +1,71 @@
+{
+  "name": "planners-form",
+  "version": "0.1.1",
+  "description": "DSH 设置中的 Planners 套件管理：环境准备、Skill 选装与更新。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "catalog.json",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "vendor",
+    "COMPATIBILITY.md",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/manager.js && node --check lib/client.js"
+  },
+  "dependencies": {
+    "tar": "7.5.11",
+    "dsh-review-dock": "file:vendor/review-dock"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "0.2.0-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "dsh-review-dock"
+      ]
+    }
+  },
+  "author": "thePlannerIvan <Lawyif@163.com>",
+  "license": "AGPL-3.0-only",
+  "bundleDependencies": [
+    "tar",
+    "dsh-review-dock"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thePlannerIvan/planners-form.git"
+  },
+  "homepage": "https://github.com/thePlannerIvan/planners-form#readme",
+  "bugs": {
+    "url": "https://github.com/thePlannerIvan/planners-form/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "skills",
+    "planners",
+    "review"
+  ]
+}

@@ -1,0 +1,18 @@
+node_modules/
+*.tgz
+artifacts/
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+*.pem
+*.key
+.DS_Store
+*.log
+
+# Local audit and developer-profile helpers
+release-audit/
+scripts/prepare-integration.mjs
+scripts/pins.json

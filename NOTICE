@@ -1,0 +1,11 @@
+Planners Form
+Copyright 2026 thePlannerIvan / 阿祖不看 TVC
+
+Contains DSH Review Dock (AGPL-3.0-only), maintained by the same author.
+The vendored snapshot is copied from the existing local dsh-review-dock project,
+including its session-scoped panel fixes. It is not represented as an unchanged
+copy of upstream commit 18759778578da9ffab595c9adb75b64611a2732d.
+See vendor/review-dock/NOTICE and LICENSE.
+
+The icon uses the non-serif geometric Logics design from logics-branding.
+Inter font licensing is preserved in assets/inter-OFL.txt.
