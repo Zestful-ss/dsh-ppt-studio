@@ -72,7 +72,7 @@ https://github.com/thePlannerIvan/planners-form
 
 ## 使用前的小提示
 
-目前支持 **DSH 0.2.0-rc.2**，安装和下载配套功能需要联网。首次使用视频制作时，还需按 [Video Craft 安装说明](https://github.com/thePlannerIvan/video-craft/blob/main/install.md) 配置渲染工具。
+目前支持 **DSH 0.2.x**（声明 `^0.2.0-rc.2`；0.2.1-rc.1 已实测）。安装和下载配套功能需要联网。首次使用视频制作时，还需按 [Video Craft 安装说明](https://github.com/thePlannerIvan/video-craft/blob/main/install.md) 配置渲染工具。
 
 插件的新版本可在 [Releases](https://github.com/thePlannerIvan/planners-form/releases) 获取。遇到问题，欢迎在 [Issues](https://github.com/thePlannerIvan/planners-form/issues) 留下反馈。
 

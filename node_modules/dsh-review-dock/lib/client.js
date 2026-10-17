@@ -42,11 +42,19 @@ globalThis.__ModuleLoader__?.load({
      */
     const surfaceStore = {
       values: new Map(),
+      revisions: new Map(),
       listeners: new Set(),
       get(sessionId) { return this.values.get(sessionId) || '' },
-      set(next, sessionId) {
-        if (!sessionId || this.get(sessionId) === next) return
+      revision(sessionId) { return this.revisions.get(sessionId) || 0 },
+      set(next, sessionId, revision) {
+        if (!sessionId) return
+        const step = Number(revision) || 0
+        // 路径没变也要认：`review_open` 每次都把 revision 往前推一格，而 Agent 重新生成
+        // **同一份** entry HTML 时路径恰恰不变 —— 只按路径做帧的 src，浏览器不会重新取页面，
+        // 人看到的就还是旧文档（2026-10-16 实测：修好的 surface 已经落盘，侧栏里仍是旧的）。
+        if (this.get(sessionId) === next && this.revision(sessionId) === step) return
         this.values.set(sessionId, next)
+        this.revisions.set(sessionId, step)
         for (const listener of Array.from(this.listeners)) listener()
       },
     }
@@ -78,6 +86,17 @@ globalThis.__ModuleLoader__?.load({
         return () => changedStore.listeners.delete(listener)
       }, [sessionId])
       return seq
+    }
+
+    /** 帧的 src 跟着 revision 走，Agent 每次交接都会真的重新取一次页面。 */
+    function useSurfaceRevision(sessionId) {
+      const [step, setStep] = React.useState(surfaceStore.revision(sessionId))
+      React.useEffect(() => {
+        const listener = () => setStep(surfaceStore.revision(sessionId))
+        surfaceStore.listeners.add(listener)
+        return () => surfaceStore.listeners.delete(listener)
+      }, [sessionId])
+      return step
     }
 
     function useSurface(sessionId) {
@@ -161,6 +180,7 @@ globalThis.__ModuleLoader__?.load({
           const sessionId = sessionFor(props)
           const remembered = useSurface(sessionId)
           const surface = surfaceFor(props, remembered)
+          const surfaceRevision = useSurfaceRevision(sessionId)
           const changedSeq = useChanged(sessionId)
           const postRef = React.useRef(null)
           const frameRef = React.useRef(null)
@@ -354,7 +374,7 @@ globalThis.__ModuleLoader__?.load({
                       assetBase: new URL('.', window.location.href).href,
                       surface: info === null ? null : { id: info.id, title: info.title },
                       capabilities: Array.isArray(info?.capabilities) ? info.capabilities : [],
-                      host: { name: 'dsh-review-dock', version: '0.2.0' },
+                      host: { name: 'dsh-review-dock', version: '0.2.4' },
                     })
                   })
                   .catch((error) => {
@@ -403,7 +423,7 @@ globalThis.__ModuleLoader__?.load({
                 if (nextSurface !== '' && revision !== seenRevision) {
                   seenRevision = revision
                   seenChanged = null
-                  surfaceStore.set(nextSurface, sessionId)
+                  surfaceStore.set(nextSurface, sessionId, revision)
                   openPanel(nextSurface, sessionId)
                 }
                 const changed = Number(value?.changedSeq ?? 0)
@@ -439,7 +459,8 @@ globalThis.__ModuleLoader__?.load({
             )
           }
 
-          const src = new URL(`api/review.page?surface=${encodeURIComponent(surface)}`, window.location.href).href
+          // `r` 不参与服务端路由，只用来换 URL：revision 一动，帧就是一次真正的重新加载。
+          const src = new URL(`api/review.page?surface=${encodeURIComponent(surface)}&r=${surfaceRevision}`, window.location.href).href
           return C(
             'div',
             {
