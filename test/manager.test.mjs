@@ -265,6 +265,18 @@ test('recover resets interrupted running default installation to failed', async 
   assert.match(recovered.defaultInstall.error, /中断/);
 });
 
+test('background install failures are reported without crashing the process', async t => {
+  const m = await fixture(t, {
+    download: async () => { throw new Error('offline'); },
+  });
+  // Simulates the HTTP 202 path: nobody awaits the job promise.
+  await m.start('install', ['feature']);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(m.job.state, 'error');
+  assert.match(m.job.message, /offline/);
+  await assert.rejects(m.running);
+});
+
 test('installs never touch the global skills root used by other presets', async t => {
   const m = await fixture(t);
   assert.equal(m.skills, join(m.home, 'dsh-ppt-studio', 'skills'));

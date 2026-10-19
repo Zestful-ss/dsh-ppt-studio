@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as tar from 'tar';
@@ -99,6 +99,58 @@ test('a repository root skill still installs, and a mismatched name is rejected'
     await assert.rejects(
       downloadPackage({ id: 'x', repository: 'someone/repo', path: 'skills/missing', revision: 'b'.repeat(40) }, join(dir, 'missing'), asFetcher(bytes)),
       /没有技能入口/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('repo-root symlinks outside the selected skill do not block installation', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ppt-dl-scope-'));
+  try {
+    const source = await mkdtemp(join(tmpdir(), 'ppt-src-link-'));
+    await mkdir(join(source, 'repo-main', 'skills', 'demo-skill'), { recursive: true });
+    await writeFile(join(source, 'repo-main', 'skills', 'demo-skill', 'SKILL.md'), '---\nname: demo-skill\n---\nBody');
+    await writeFile(join(source, 'repo-main', 'LICENSE'), 'MIT');
+    await symlink('/tmp', join(source, 'repo-main', 'CLAUDE.md'));
+    const linked = join(dir, 'linked.tgz');
+    await tar.c({ gzip: true, file: linked, cwd: source }, ['repo-main']);
+    await rm(source, { recursive: true, force: true });
+
+    const bytes = await readFile(linked);
+    const dest = join(dir, 'linked-out');
+    await downloadPackage(
+      { id: 'demo-skill', repository: 'someone/repo', path: 'skills/demo-skill', revision: 'a'.repeat(40) },
+      dest,
+      asFetcher(bytes),
+    );
+    assert.match(await readFile(join(dest, 'SKILL.md'), 'utf8'), /name: demo-skill/);
+    await assert.rejects(lstat(join(dest, 'CLAUDE.md')), { code: 'ENOENT' });
+    assert.equal(await readFile(join(dest, '.dsh-ppt-studio-source', 'LICENSE'), 'utf8'), 'MIT');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a symlink inside the selected skill directory is still rejected', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ppt-dl-link-'));
+  try {
+    const source = await mkdtemp(join(tmpdir(), 'ppt-src-inner-'));
+    await mkdir(join(source, 'repo-main', 'skills', 'demo-skill'), { recursive: true });
+    await writeFile(join(source, 'repo-main', 'skills', 'demo-skill', 'SKILL.md'), '---\nname: demo-skill\n---\n');
+    await symlink('/tmp', join(source, 'repo-main', 'skills', 'demo-skill', 'escape'));
+    const file = join(dir, 'inner.tgz');
+    await tar.c({ gzip: true, file, cwd: source }, ['repo-main']);
+    await rm(source, { recursive: true, force: true });
+
+    const bytes = await readFile(file);
+    await assert.rejects(
+      downloadPackage(
+        { id: 'demo-skill', repository: 'someone/repo', path: 'skills/demo-skill', revision: 'a'.repeat(40) },
+        join(dir, 'inner-out'),
+        asFetcher(bytes),
+      ),
+      /符号链接/,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
