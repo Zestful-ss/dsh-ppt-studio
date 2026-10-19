@@ -25,27 +25,26 @@ test('the client bundle registers the Settings panel and PPT workbench tab',asyn
  let plugin=null;
  const React={createElement:(type,props,...children)=>({type,props,children}),useState:initial=>[typeof initial==='function'?initial():initial,()=>{}],useRef:current=>({current}),useEffect:()=>{},useMemo:fn=>fn(),useCallback:fn=>fn};
  runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,window:{location:{href:'http://localhost/'},localStorage:{getItem:()=>null,setItem:()=>{}}},__ModuleLoader__:{load:({id,factory})=>{assert.equal(id,'dsh-ppt-studio');plugin=factory(()=>React);}}});
- const registered=[],sections=[];let disposed=0,started=null,closed=0;
+ const registered=[],sections=[];let disposed=0;
  const ctx={
   slots:{inject:(name,cb)=>{assert.equal(name,'settings.section');cb();return()=>{};},register:(options,component)=>{sections.push({options,component});return()=>{};}},
   effect:fn=>fn(),
-  get:name=>name==='uiWorkspace'?{startSession:(workspaceId,options)=>{started={workspaceId,options};}}:undefined,
+  get:()=>undefined,
   inject:(_names,cb)=>cb({effect:fn=>fn(),betterSidebar:{registerTab:descriptor=>{registered.push(descriptor);return()=>{disposed++;}}}}),
  };
  plugin.apply(ctx);
- console.log('DEBUG_TAB',registered[0]);
  assert.equal(registered.length,1);
  assert.equal(registered[0].id,'dsh-ppt-studio:workbench');
  assert.equal(typeof registered[0].component,'function');
  assert.equal(typeof registered[0].available,'function');
  assert.equal(sections.length,1);
  assert.equal(sections[0].options.id,'dsh-ppt-studio');
- const tree=sections[0].component({close:()=>{closed++;}});
- const nodes=[];const visit=node=>{if(!node||typeof node!=='object')return;if(Array.isArray(node)){node.forEach(visit);return;}nodes.push(node);visit(node.children);};visit(tree);
- const start=nodes.find(node=>node.type==='button'&&node.children.includes('新建 PPT 专用会话'));
- start.props.onClick();
- assert.equal(started.options.agentPreset,'ppt-studio');
- assert.equal(closed,1);
+ assert.equal(sections[0].options.label(),'PPT Studio');
+ const tree=sections[0].component({});
+ const nodes=[];const texts=[];const visit=node=>{if(node==null)return;if(Array.isArray(node)){node.forEach(visit);return;}if(typeof node!=='object'){texts.push(String(node));return;}nodes.push(node);visit(node.children);};visit(tree);
+ assert.ok(texts.includes('PPT Studio'),'settings page title');
+ assert.ok(texts.includes('技能库'),'skills section');
+ assert.ok(!texts.includes('新建 PPT 专用会话'),'session shortcut removed');
  const toggle=nodes.find(node=>node.type==='input'&&node.props.type==='checkbox');
  toggle.props.onChange({target:{checked:false}});
  assert.equal(disposed,1);

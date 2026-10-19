@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, readlink, lstat, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readlink, lstat, rm, symlink, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Manager, closure, downloadPackage } from '../lib/manager.js';
@@ -262,4 +263,18 @@ test('recover resets interrupted running default installation to failed', async 
   const recovered = await m.state();
   assert.equal(recovered.defaultInstall.status, 'failed');
   assert.match(recovered.defaultInstall.error, /中断/);
+});
+
+test('installs never touch the global skills root used by other presets', async t => {
+  const m = await fixture(t);
+  assert.equal(m.skills, join(m.home, 'dsh-ppt-studio', 'skills'));
+
+  await run(m, 'install', ['feature']);
+  await mkdir(join(m.home, 'skills'), { recursive: true });
+  const before = await readdir(join(m.home, 'skills'));
+  await run(m, 'uninstall', ['feature']);
+  const after = await readdir(join(m.home, 'skills'));
+
+  assert.deepEqual(after, before, 'global skills root must not gain or lose entries');
+  assert.ok(existsSync(join(m.home, 'dsh-ppt-studio', 'skills')), 'private root stays the only install target');
 });
