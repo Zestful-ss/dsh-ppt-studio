@@ -161,3 +161,24 @@ test('a model can create, update, read a selection and export using the advertis
   const archive = await JSZip.loadAsync(await readFile(exported.value.path));
   assert.match(await archive.file('ppt/slides/slide1.xml').async('text'), /Model-visible editable content/);
 });
+
+test('a model imports a local PPTX into the same editable project library', async t => {
+  const { ctx, home, key } = await mountPreset(t);
+  const { default: PptxGenJS } = await import('pptxgenjs');
+  const input = new PptxGenJS();
+  input.layout = 'LAYOUT_WIDE';
+  input.addSlide().addText('Imported through the native model tool', { x: 1, y: 1, w: 8, h: 1, fontSize: 28 });
+  const path = join(home, 'model-source.pptx');
+  const source = await input.write({ outputType: 'nodebuffer' });
+  await writeFile(path, source);
+  const assembly = await ctx.systemPrompt.assemble({ scope: key });
+  const args = { action: 'import', path };
+  assert.deepEqual(validateJsonSchemaValue(assembly.tools.find(tool => tool.name === 'ppt_project').parameters, args), []);
+  const result = await ctx.tools.execute({ name: 'ppt_project', arguments: args, agent: key, signal: new AbortController().signal, callId: 'native-model-import' });
+  assert.equal(result.isError, false, JSON.stringify(result));
+  const { ProjectStore } = await import('../lib/project.js');
+  const store = new ProjectStore(join(home, 'dsh-ppt-studio'));
+  const project = await store.read(result.value.id);
+  assert.equal(project.slides[0].elements.find(element => element.type === 'text').text, 'Imported through the native model tool');
+  assert.deepEqual(await readFile(path), source);
+});

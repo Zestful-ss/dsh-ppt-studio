@@ -1,15 +1,30 @@
 import http from 'node:http';
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createHandler } from '../lib/index.js';
-import { createSkillsHandler } from '../lib/skills-api.js';
-import { getSkillRuntime } from '../lib/skill-runtime.js';
-import { ProjectStore } from '../lib/project.js';
+import PptxGenJS from 'pptxgenjs';
 
+// The plugin resolves its storage root when modules load, so the isolated home must be set first.
 const tempHome = await mkdtemp(join(tmpdir(), 'ppt-smoke-home-'));
 process.env.DSH_HOME = tempHome;
+
+const { createHandler } = await import('../lib/index.js');
+const { createSkillsHandler } = await import('../lib/skills-api.js');
+const { getSkillRuntime } = await import('../lib/skill-runtime.js');
+const { ProjectStore } = await import('../lib/project.js');
+
+const smokePptxPath = join(tempHome, 'smoke-import.pptx');
+{
+ const pptx = new PptxGenJS();
+ pptx.layout = 'LAYOUT_16x9';
+ const slide = pptx.addSlide();
+ slide.addText('导入验证标题', { x: 0.8, y: 0.7, w: 8, h: 1.1, fontSize: 30, bold: true, color: '1F2430' });
+ slide.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: 2.1, w: 4.4, h: 1.8, fill: { color: 'F3F4F6' }, line: { color: 'D8D8DE', width: 1 } });
+ slide.addTable([['项目', '数值'], ['A', '1'], ['B', '2']], { x: 5.6, y: 2.1, w: 3.4, h: 1.8, fontSize: 14 });
+ slide.addNotes('导入烟测备注');
+ await writeFile(smokePptxPath, await pptx.write({ outputType: 'nodebuffer' }));
+ console.log('PPT_STUDIO_SMOKE_PPTX=' + smokePptxPath);
+}
 
 const canonicalRoot = join(tempHome, 'dsh-ppt-studio');
 const store = new ProjectStore(canonicalRoot, { legacyDir: join(tempHome, 'projects') });
@@ -94,6 +109,7 @@ const server = http.createServer(async (req, res) => {
 
   // HTML Host Shell
   const view = url.searchParams.get('view') || 'settings';
+  const session = url.searchParams.get('session') || 'ppt-smoke';
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -110,9 +126,9 @@ const server = http.createServer(async (req, res) => {
 <body>
   <div id="nav">
     <strong>PPT Studio Smoke</strong>
-    <a href="/?view=settings" class="${view === 'settings' ? 'active' : ''}">设置页 (Settings)</a>
-    <a href="/?view=workbench" class="${view === 'workbench' ? 'active' : ''}">侧栏工作台 (Workbench)</a>
-    <span id="session-info" style="font-size:12px;color:#777;margin-left:auto;">Session: ppt-smoke</span>
+    <a href="/?view=settings&session=${encodeURIComponent(session)}" class="${view === 'settings' ? 'active' : ''}">设置页 (Settings)</a>
+    <a href="/?view=workbench&session=${encodeURIComponent(session)}" class="${view === 'workbench' ? 'active' : ''}">侧栏工作台 (Workbench)</a>
+    <span id="session-info" style="font-size:12px;color:#777;margin-left:auto;"></span>
   </div>
   <div id="app"></div>
 
@@ -124,13 +140,31 @@ const server = http.createServer(async (req, res) => {
     window.lastDispatchedMessage = null;
     window.lastDraftMessage = null;
 
-    const fakeScope = { sessionId: 'ppt-smoke' };
+    const view = ${JSON.stringify(view)};
+    const sessionId = ${JSON.stringify(session)};
+    document.getElementById('session-info').textContent = 'Session: ' + sessionId;
+
+    const fakeScope = { sessionId };
+    let workbenchRoot = null;
+    const renderWorkbench = tabDesc => {
+      if (view !== 'workbench') return;
+      const host = document.getElementById('app');
+      if (!host) return;
+      if (!workbenchRoot) workbenchRoot = ReactDOM.createRoot(host);
+      const available = typeof tabDesc.available === 'function' ? tabDesc.available(fakeCtx, fakeScope) : true;
+      if (!available) {
+        workbenchRoot.render(React.createElement('div', { style: { padding: '24px', fontSize: '13px', lineHeight: '1.7' } },
+          '会话 ' + sessionId + ' 不是 PPT Studio 预设，工作台已拒绝加载（PRESET_REQUIRED）。'));
+        return;
+      }
+      workbenchRoot.render(React.createElement(tabDesc.component, { ctx: fakeCtx, scope: fakeScope, visible: true }));
+    };
     const fakeCtx = {
       slots: {
         inject: (name, cb) => cb(),
         register: (options, component) => {
           window.registeredSections.push({ options, component });
-          if ('${view}' === 'settings') {
+          if (view === 'settings') {
             ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(component, { close: () => console.log('close') }));
           }
         }
@@ -160,11 +194,7 @@ const server = http.createServer(async (req, res) => {
         betterSidebar: {
           registerTab: tabDesc => {
             window.registeredTabs.push(tabDesc);
-            if ('${view}' === 'workbench') {
-              ReactDOM.createRoot(document.getElementById('app')).render(
-                React.createElement(tabDesc.component, { ctx: fakeCtx, scope: fakeScope, visible: true })
-              );
-            }
+            renderWorkbench(tabDesc);
             return () => {};
           }
         }
@@ -186,18 +216,27 @@ const server = http.createServer(async (req, res) => {
   res.end(html);
 });
 
-server.listen(43198, '127.0.0.1', () => {
-  console.log('PPT_STUDIO_SMOKE_URL=http://127.0.0.1:43198');
+server.listen(0, '127.0.0.1', () => {
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  console.log(`PPT_STUDIO_SMOKE_URL=http://127.0.0.1:${port}`);
 });
 
-process.on('SIGINT', async () => {
-  server.close();
+let closing = false;
+async function shutdown() {
+  if (closing) return;
+  closing = true;
+  server.closeAllConnections?.();
+  await new Promise(resolve => server.close(() => resolve()));
   await rm(tempHome, { recursive: true, force: true });
+}
+
+process.on('SIGINT', async () => {
+  await shutdown();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  server.close();
-  await rm(tempHome, { recursive: true, force: true });
+  await shutdown();
   process.exit(0);
 });
