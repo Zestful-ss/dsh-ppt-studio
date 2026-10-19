@@ -16,6 +16,7 @@
             config:
               providerName: dsh-ppt-studio-local
               includeDefaultRoots: false
+              watch: true
               customSkillDirs:
                 - !!js dshHomePath('dsh-ppt-studio/skills')
           - id: ppt-studio-agent

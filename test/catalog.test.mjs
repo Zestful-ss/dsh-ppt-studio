@@ -11,12 +11,12 @@ test('a catalog skill installs from its pinned source and updates to the checked
  const next='f'.repeat(40);
  const m=new Manager({home,catalog,fetcher:async()=>new Response(JSON.stringify({sha:next})),download:async(p,d)=>{await mkdir(d,{recursive:true});await writeFile(join(d,'SKILL.md'),`---\nname: ${p.id}\n---\n`);}});
  const target='image-to-editable-ppt';
- m.start('install',[target]);await m.running;assert.equal(m.job.state,'done',m.job.message);
+ await m.start('install',[target]);await m.running;assert.equal(m.job.state,'done',m.job.message);
  assert.ok((await m.state()).installed[target]);
  const entry=catalog.packages.find(p=>p.id===target);
  assert.equal(entry.repository,'ningzimu/image-to-editable-ppt-skill');
  assert.equal(entry.path,'skills/image-to-editable-ppt');
- m.start('update',[target]);await m.running;assert.equal(m.job.state,'done',m.job.message);
+ await m.start('update',[target]);await m.running;assert.equal(m.job.state,'done',m.job.message);
  assert.equal((await m.state()).installed[target].revision,next);
 });
 

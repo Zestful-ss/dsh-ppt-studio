@@ -95,17 +95,23 @@ npm run check   # 语法检查
 npm test        # 单元测试 + 路由端到端测试
 ```
 
-## 技能库（按需安装）
+## 技能库与设置页（按需安装与自定义来源）
 
-插件内置一个多来源技能目录（`catalog.json`），每条记录一个 GitHub 仓库里的具体 Skill：**锁定 commit、记录许可证、按需安装**，装完即可被 Agent 使用，不装就不占任何上下文。
+插件提供轻量化的技能管理支持：**默认按需安装，不预装无用文件，不执行环境探测**。
 
-用 `ppt_skills` 工具操作：
+- **设置页管理**：在 DSH 设置中打开「PPT 专用模式与技能管理」，可浏览预置的 16 个来源与已安装状态，支持搜索、多选批量安装、更新、修复与卸载。
+- **首次默认安装**：新环境首次打开设置页时，会自动准备默认的 `ppt-master`；若用户主动卸载，则记录为取消，不会反复自动装回。
+- **添加 GitHub 来源**：可直接粘贴公开 GitHub 仓库或指定子目录链接，自动解析锁定 40 位 Commit SHA 并识别许可证，支持“仅添加来源”或“添加并安装”。
+- **卸载与删除**：卸载仅删除技能托管目录与标记，不影响已制作的 PPT 项目和导出文件；自定义来源支持一并删除记录。
+
+在 PPT 专用会话中，也可以直接用 `ppt_skills` 工具操作：
 
 ```text
-ppt_skills { "action": "list" }                     # 看目录与安装状态
+ppt_skills { "action": "list" }                     # 查看目录与安装状态
 ppt_skills { "action": "install", "id": "ppt-master" }
+ppt_skills { "action": "uninstall", "id": "ppt-master" } # 卸载指定 Skill
 ppt_skills { "action": "update",  "id": "ppt-master" }
-ppt_skills { "action": "repair" }                   # 修复全部已安装项
+ppt_skills { "action": "repair" }                   # 修复已登记项
 ```
 
 目录按产出一共分三类：

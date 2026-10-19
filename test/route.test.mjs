@@ -53,10 +53,20 @@ test('route: guarded, creates, saves and exports', async () => {
     assert.equal(created.projects.length, 1);
 
     const id = created.project.id;
+
+    // Test missing baseRevision is rejected
+    const missingBase = await call('POST', {
+      action: 'save',
+      project: { ...created.project, title: '未带版本' },
+      operationId: 'op_no_base',
+    }, boot.token);
+    assert.equal(missingBase.status, 400);
+
     const saved = await (await call('POST', {
       action: 'save',
       project: { ...created.project, title: '改过的标题' },
       baseRevision: created.project.revision,
+      operationId: 'op_save_route_1',
     }, boot.token)).json();
     assert.equal(saved.project.revision, created.project.revision + 1);
 
@@ -64,25 +74,35 @@ test('route: guarded, creates, saves and exports', async () => {
       action: 'save',
       project: { ...created.project, title: '过期写入' },
       baseRevision: created.project.revision,
+      operationId: 'op_save_route_2',
     }, boot.token);
     assert.equal(conflict.status, 409);
+    assert.equal((await conflict.json()).currentRevision, saved.project.revision);
 
-    const exported = await (await call('POST', { action: 'export', id }, boot.token)).json();
+    // Query revision endpoint
+    const revRes = await (await call('GET', null, null, `http://127.0.0.1/api/dsh-ppt-studio?action=revision&id=${id}`)).json();
+    assert.equal(revRes.id, id);
+    assert.equal(revRes.revision, saved.project.revision);
+
+    const exported = await (await call('POST', { action: 'export', id, baseRevision: saved.project.revision }, boot.token)).json();
     assert.match(exported.path, /\.pptx$/);
     assert.ok(exported.bytes > 1000);
 
     const requests = await (await call('POST', {
       action: 'request',
       id,
+      baseRevision: saved.project.revision,
+      operationId: 'op_req_route_1',
       slideId: saved.project.slides[0].id,
       instruction: '标题再大一点',
       area: { x: 0, y: 0, w: 200, h: 100 },
     }, boot.token)).json();
     assert.equal(requests.project.pending.at(-1).instruction, '标题再大一点');
+    assert.equal(requests.project.pending.at(-1).baseRevision, saved.project.revision);
 
     const deleted = await (await call('POST', { action: 'delete', id }, boot.token)).json();
     assert.deepEqual(deleted.projects, []);
-    assert.equal((await new ProjectStore(home).list()).length, 0);
+    assert.equal((await new ProjectStore(join(home, 'dsh-ppt-studio')).list()).length, 0);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

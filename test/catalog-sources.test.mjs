@@ -124,8 +124,8 @@ test('an install of a restricted source fails without touching the disk', async 
       catalog: { packages: [pkg('blocked', { restricted: true, license: 'none' })] },
       download: async () => { throw new Error('must not download'); },
     });
-    manager.start('install', ['blocked']);
-    await manager.running;
+    await manager.start('install', ['blocked']);
+    await assert.rejects(manager.running, /许可证/);
     assert.equal(manager.job.state, 'error');
     assert.match(manager.job.message, /许可证/);
     assert.deepEqual(Object.keys((await manager.state()).installed), []);

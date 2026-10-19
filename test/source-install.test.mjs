@@ -11,7 +11,7 @@ const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
 const covered=rel=>manifest.files.some(entry=>rel===entry||rel.startsWith(`${entry}/`));
 
 test('the published file list covers every runtime entry and resource',async()=>{
- for(const rel of ['lib/index.js','lib/agent.js','lib/project-api.js','lib/client.js','lib/project.js','lib/export.js','lib/manager.js','lib/skill-discovery.js','catalog.json','cordis.patch.yml','assets/icon.svg','locale/en.json','locale/zh.json']){
+ for(const rel of ['lib/index.js','lib/agent.js','lib/project-api.js','lib/client.js','lib/project.js','lib/export.js','lib/manager.js','lib/skill-runtime.js','lib/skill-sources.js','lib/skills-api.js','catalog.json','cordis.patch.yml','assets/icon.svg','locale/en.json','locale/zh.json']){
   assert.ok(covered(rel),`package.json files is missing ${rel}`);
   await stat(join(root,rel));
  }

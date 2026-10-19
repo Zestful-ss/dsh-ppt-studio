@@ -1,6 +1,6 @@
 {
   "name": "dsh-ppt-studio",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "PPT Studio for DSH：在侧边栏逐页制作、圈选修改并导出可编辑 PPTX。",
   "type": "module",
   "main": "lib/index.js",
@@ -63,5 +63,10 @@
     "ppt",
     "pptx",
     "slides"
-  ]
+  ],
+  "devDependencies": {
+    "jszip": "^3.10.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
 }
