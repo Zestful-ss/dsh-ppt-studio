@@ -8,12 +8,27 @@ const pkg=(id,deps=[])=>({id,title:id,available:true,repository:'thePlannerIvan/
 const catalog={packages:[pkg('planners-review-core'),pkg('core'),pkg('feature',['core']),{id:'private',available:false}]};
 async function fixture(t,options={}) {const home=await mkdtemp(join(tmpdir(),'planners-form-test-'));t.after(()=>rm(home,{recursive:true,force:true}));const download=async(p,d)=>{await mkdir(d,{recursive:true});await writeFile(join(d,'SKILL.md'),`---\nname: ${p.id}\ndescription: Fixture\n---\n${p.revision}`);};return new Manager({home,catalog,download,...options});}
 async function run(m,action,ids){m.start(action,ids);await m.running;return m.job;}
+test('legacy PPT skill mounts are unlinked only when they target the private managed copy',async t=>{
+ const m=await fixture(t);const target=join(m.skills,'feature'),global=join(m.home,'skills','feature');
+ await mkdir(target,{recursive:true});await writeFile(join(target,'SKILL.md'),`---
+name: feature
+---
+`);
+ await mkdir(join(m.home,'skills'),{recursive:true});await symlink(target,global);
+ const unrelated=join(m.home,'other-root','feature');await mkdir(unrelated,{recursive:true});await writeFile(join(unrelated,'SKILL.md'),'other');
+ const unrelatedLink=join(m.home,'skills','other-feature');await symlink(unrelated,unrelatedLink);
+ await writeFile(m.stateFile,JSON.stringify({schema:1,installed:{feature:{revision:a}}}));
+ await m.cleanupLegacyGlobalMounts();
+ await assert.rejects(lstat(global),{code:'ENOENT'});
+ assert.equal(await readlink(unrelatedLink),unrelated);
+ assert.equal(await m.ownership('feature',await m.state(),[{name:'feature',resourceBase:{kind:'directory',path:target}}]),'managed');
+});
 test('dependency closure is ordered, unique, rejects unknown and cycles',()=>{assert.deepEqual(closure(catalog,['feature','core']).map(p=>p.id),['core','feature']);assert.throws(()=>closure(catalog,['../evil']));assert.throws(()=>closure({packages:[pkg('a',['b']),pkg('b',['a'])]},['a']));});
-test('installs all dependencies once and mounts DSH-visible skill directories',async t=>{const m=await fixture(t);assert.equal((await run(m,'install',['feature'])).state,'done');assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'managed');assert.equal(await readlink(join(m.mounts,'feature')),join(m.skills,'feature'));assert.deepEqual(Object.keys((await m.state()).installed),['core','feature']);});
+test('installs skills directly in the preset-owned directory',async t=>{const m=await fixture(t);assert.equal((await run(m,'install',['feature'])).state,'done');assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'managed');assert.match(await readFile(join(m.skills,'feature','SKILL.md'),'utf8'),/name: feature/);await assert.rejects(lstat(join(m.home,'skills','feature')),{code:'ENOENT'});assert.deepEqual(Object.keys((await m.state()).installed),['core','feature']);});
 test('external installation is preserved byte-for-byte',async t=>{const m=await fixture(t);await mkdir(join(m.mounts,'feature'),{recursive:true});await writeFile(join(m.mounts,'feature','SKILL.md'),'mine');await run(m,'install',['feature']);assert.equal(await readFile(join(m.mounts,'feature','SKILL.md'),'utf8'),'mine');assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'external');assert.equal((await m.state()).installed.feature,undefined);});
 test('failed staged download never changes an existing install',async t=>{const m=await fixture(t);await run(m,'install',['feature']);const original=await readFile(join(m.skills,'feature','SKILL.md'),'utf8');m.download=async()=>{throw Error('offline');};await run(m,'repair');assert.equal(m.job.state,'error');assert.equal(await readFile(join(m.skills,'feature','SKILL.md'),'utf8'),original);assert.equal((await m.state()).installed.feature.revision,a);});
-test('missing managed mount is repaired',async t=>{const m=await fixture(t);await run(m,'install',['feature']);await rm(join(m.mounts,'feature'));await run(m,'repair');assert.equal(m.job.state,'done');assert.equal(await readlink(join(m.mounts,'feature')),join(m.skills,'feature'));});
-test('replaced external mount is never overwritten on repair',async t=>{const m=await fixture(t);await run(m,'install',['feature']);await rm(join(m.mounts,'feature'));await mkdir(join(m.mounts,'feature'));await writeFile(join(m.mounts,'feature','SKILL.md'),'external');await run(m,'repair');assert.equal(await readFile(join(m.mounts,'feature','SKILL.md'),'utf8'),'external');});
+test('missing managed skill is repaired in the private root',async t=>{const m=await fixture(t);await run(m,'install',['feature']);await rm(join(m.mounts,'feature'),{recursive:true,force:true});await run(m,'repair');assert.equal(m.job.state,'done');assert.match(await readFile(join(m.skills,'feature','SKILL.md'),'utf8'),/name: feature/);});
+test('replaced user skill in the private root is never overwritten on repair',async t=>{const m=await fixture(t);await run(m,'install',['feature']);await rm(join(m.mounts,'feature'),{recursive:true,force:true});await mkdir(join(m.mounts,'feature'));await writeFile(join(m.mounts,'feature','SKILL.md'),'external');await run(m,'repair');assert.equal(await readFile(join(m.mounts,'feature','SKILL.md'),'utf8'),'external');});
 test('concurrent operations are rejected',async t=>{let release;const m=await fixture(t,{download:async()=>{await new Promise(r=>release=r);throw Error('test completed');}});m.start('install',['feature']);assert.throws(()=>m.start('repair'),/正在进行/);while(!release)await new Promise(r=>setTimeout(r,1));release();await m.running;});
 test('check updates does not change files, explicit update installs new revisions',async t=>{const m=await fixture(t,{fetcher:async()=>new Response(JSON.stringify({sha:b}))});await run(m,'install',['feature']);await m.checkUpdates();assert.equal((await m.state()).installed.feature.revision,a);assert.equal((await m.status()).packages.find(p=>p.id==='feature').update,b);await run(m,'update',['feature']);assert.equal(m.job.state,'done');assert.equal((await m.state()).installed.feature.revision,b);});
 test('update failure is shown, never silently treated as latest',async t=>{const m=await fixture(t,{fetcher:async()=>new Response('',{status:403})});await run(m,'install',['feature']);await m.checkUpdates();assert.match(m.checkError,/403/);await run(m,'update',['feature']);assert.equal(m.job.state,'error');assert.equal((await m.state()).installed.feature.revision,a);});
@@ -30,7 +45,7 @@ test('uses registry names and resource paths from arbitrary DSH roots without co
  assert.equal((await m.status()).packages.find(p=>p.id==='feature').ownership,'external');
  assert.equal((await run(m,'install',['feature'])).state,'done');
  assert.equal(await readlink(join(m.skills,'feature')),external);
- await assert.rejects(lstat(join(m.mounts,'feature')),{code:'ENOENT'});
+ await assert.rejects(lstat(join(m.home,'skills','feature')),{code:'ENOENT'});
  assert.equal(await readFile(join(external,'SKILL.md'),'utf8'),'user content');
 });
 test('realpath aliases from DSH discovery remain managed and updateable',async t=>{

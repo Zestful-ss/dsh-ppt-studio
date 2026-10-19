@@ -1,3 +1,17 @@
+# 0.4.1
+
+隔离与模式：
+
+- 新增 Agent preset「PPT 专用模式」，显示在新会话的 Agent 预设列表中；不修改 `agent-preset-registry` 的默认项，Standard 仍保持默认。
+- 把 `ppt_project` / `ppt_skills` 工具和 PPT filesystem skill provider 移入 preset scope；Standard 和其他 preset 不会收到这些 Agent-facing 注册。
+- preset 技能 provider 只扫描 `$DSH_HOME/dsh-ppt-studio/skills`，安装器不再把技能链接到全局 `$DSH_HOME/skills`；迁移时仅清理目标明确指向插件私有目录的旧 PPT 符号链接。
+- 侧栏入口先通过轻量 Session-header 检查，只有 `agentPreset === 'ppt-studio'` 的会话才显示；工作台 API 对其他会话返回 `PRESET_REQUIRED`。
+- Host 全局桥接不静态加载项目/导出实现；通过 preset 检查后才动态加载，`pptxgenjs` 只在导出操作调用时加载。
+
+界面：
+
+- Settings 中新增「PPT 专用模式」面板，可一键新建 PPT preset 会话，并控制侧边栏入口显示。
+
 # 0.3.0
 
 新增：

@@ -10,7 +10,7 @@
 - **结构化项目**：页面与元素都有稳定 ID，支持撤销、自动保存、版本冲突提示。
 - **圈选修改**：在画布上框选区域，写下要求，生成一条待处理的修改请求，AI 读取后按区域和元素 ID 修改同一项目。
 - **导出 PPTX**：文字、基础形状、表格和常用图表导出为 PowerPoint 原生对象；图片保持图片。无法原生表达的内容会被明确报告，不会整页转成截图。
-- **AI 工具**：`ppt_project` 提供 list / read / create / update / export / requests，可直接让模型建稿、改页、导出。
+- **按 preset 隔离**：`ppt_project` / `ppt_skills` 工具和 PPT 专属技能只注册在「PPT 专用模式」preset。标准模式及其他 preset 看不到这些工具或技能；项目 API 也会校验当前会话的 preset。
 
 ## 安装
 
@@ -22,12 +22,16 @@ https://github.com/Zestful-ss/dsh-ppt-studio
 
 安装后硬刷新浏览器（Cmd/Ctrl+Shift+R）。也可以从本地目录安装（`plugin_manager` 或 `dsh plugin add <本地路径>`），适合开发调试。
 
-装好后，在右侧栏的「+」菜单里选择 **PPT 工作台**。
+打开「设置 → PPT 专用模式」，点「新建 PPT 专用会话」；也可在新建会话的 Agent 预设选择器中选 **PPT 专用模式**。**Standard 仍是默认模式**，已有会话不会被切换。Settings 页的开关只控制侧边栏入口显示；侧栏入口会再按会话 preset 验证，非 PPT 会话看不到入口，直接请求 API 也会被拒绝。
+
+Agent preset 隔离的是工具与 Skill 注册范围，不是操作系统安全沙箱。Skills 安装到 preset 专属目录，正文按调用加载；请只启用可信来源，并由 DSH 现有授权/沙箱策略约束可能执行的命令。Profile 仍加载一个轻量桥接与 Settings 面板：桥接只注册受会话 preset 校验的 API；项目/导出引擎要通过校验后才动态载入。
+
+
 
 ### 依赖
 
 - DSH `0.2.1-rc.1` 及以上（`<0.3.0`）。
-- 可选：`dsh-better-sidebar` 0.28.0 及以上。未安装时插件照常加载，但侧边栏页签不会出现；`ppt_project` 工具与导出仍然可用。
+- 可选：`dsh-better-sidebar` 0.28.0 及以上。未安装时侧边栏工作台不可见；在 PPT 专用 preset 中，`ppt_project` / `ppt_skills` 工具仍可用。
 
 ## 数据位置
 
@@ -35,7 +39,10 @@ https://github.com/Zestful-ss/dsh-ppt-studio
 |---|---|
 | 项目文件 | `$DSH_HOME/dsh-ppt-studio/projects/<projectId>.json` |
 | 导出的 PPTX | `$DSH_HOME/dsh-ppt-studio/exports/<projectId>/` |
+| PPT preset 专属技能 | `$DSH_HOME/dsh-ppt-studio/skills/<skillId>/` |
 | 技能安装记录 | `$DSH_HOME/dsh-ppt-studio/state.json` |
+
+PPT 技能目录只由 PPT preset 中的 `customSkillDirs` 扫描；安装器不会再把技能链接进全局 `$DSH_HOME/skills`。
 
 `DSH_HOME` 未设置时使用 `~/.dsh`。项目文件是可读的 JSON，可以纳入你自己的版本管理。
 

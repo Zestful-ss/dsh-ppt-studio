@@ -1,7 +1,22 @@
 - insert:
-    - id: dsh-ppt-studio-local-skills
-      name: '@deepseek-ai/dsh-skill-filesystem'
-      config:
-        providerName: dsh-ppt-studio-local
+    # Host bridge and Settings panel remain present, but each data request is checked
+    # against the exact session header. Agent tools and skill discovery live below.
     - id: dsh-ppt-studio
       name: dsh-ppt-studio
+    - id: preset-ppt-studio
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: ppt-studio
+        name: PPT 专用模式
+        description: 仅在此模式中启用 PPT 工具与专属技能目录。
+        order: 40
+        plugins:
+          - id: ppt-studio-local-skills
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              providerName: dsh-ppt-studio-local
+              includeDefaultRoots: false
+              customSkillDirs:
+                - !!js dshHomePath('dsh-ppt-studio/skills')
+          - id: ppt-studio-agent
+            name: 'dsh-ppt-studio/agent'

@@ -14,6 +14,11 @@ Modifications made in 2026-10 (see git history for the full record):
   review-dock dependency and its bundled copies.
 - Removed the forced planners-review-core dependency from install plans and
   dropped the retired Planners settings page from the client half.
+- Added a selectable `ppt-studio` Agent preset. The Agent tools and filesystem
+  skill provider are registered in its scope; the global bridge checks the
+  session preset before loading the PPT project API. The Settings panel creates
+  a new PPT preset session and controls sidebar-entry visibility. Legacy global
+  PPT skill aliases are removed only when they resolve to this plugin's own copy.
 
 The DSH Review Dock component shipped by the upstream project is NOT included
 in this fork.

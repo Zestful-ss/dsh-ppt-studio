@@ -10,14 +10,18 @@ process.env.DSH_HOME = home;
 const { createHandler } = await import('../lib/index.js');
 const { ProjectStore } = await import('../lib/project.js');
 
-const handler = createHandler();
-const call = (method, body, token, url = 'http://127.0.0.1/api/dsh-ppt-studio') => {
+const handler = createHandler({ authorizePreset: async sessionId => sessionId === 'ppt-test' });
+const call = (method, body, token, url = 'http://127.0.0.1/api/dsh-ppt-studio', sessionId = 'ppt-test') => {
+  const target = new URL(url);
+  if (method === 'GET') target.searchParams.set('sessionId', sessionId);
   const headers = {};
+  let payload;
   if (body) {
     headers['content-type'] = 'application/json';
     headers['x-ppt-studio-token'] = token ?? '';
+    payload = JSON.stringify({ ...body, sessionId });
   }
-  return handler(new Request(url, { method, headers, body: body ? JSON.stringify(body) : undefined }));
+  return handler(new Request(target.href, { method, headers, body: payload }));
 };
 
 test('route: guarded, creates, saves and exports', async () => {
@@ -26,6 +30,9 @@ test('route: guarded, creates, saves and exports', async () => {
     assert.equal(typeof boot.token, 'string');
     assert.ok(boot.token.length > 10);
     assert.deepEqual(boot.projects, []);
+
+    const mode = await (await call('GET', null, null, 'http://127.0.0.1/api/dsh-ppt-studio?action=mode')).json();
+    assert.equal(mode.mode, 'ppt-studio');
 
     const denied = await call('POST', { action: 'create', title: 'x' }, 'wrong');
     assert.equal(denied.status, 403);
@@ -36,6 +43,10 @@ test('route: guarded, creates, saves and exports', async () => {
       body: JSON.stringify({ action: 'create' }),
     }));
     assert.equal(crossSite.status, 403);
+
+    const standardSession = await call('GET', null, null, 'http://127.0.0.1/api/dsh-ppt-studio', 'standard-session');
+    assert.equal(standardSession.status, 403);
+    assert.equal((await standardSession.json()).code, 'PRESET_REQUIRED');
 
     const created = await (await call('POST', { action: 'create', title: '接口测试' }, boot.token)).json();
     assert.equal(created.project.title, '接口测试');

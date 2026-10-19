@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 const home = await mkdtemp(join(tmpdir(), 'ppt-studio-render-'));
 process.env.DSH_HOME = home;
-const { summaryText } = await import('../lib/index.js');
+const { summaryText } = await import('../lib/agent.js');
 const { newProject, applyOperations } = await import('../lib/project.js');
 
 test('read output gives the model slide and element ids it can act on', () => {

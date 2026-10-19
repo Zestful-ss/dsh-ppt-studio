@@ -1,11 +1,12 @@
 {
   "name": "dsh-ppt-studio",
-  "version": "0.3.0",
+  "version": "0.4.1",
   "description": "PPT Studio for DSH：在侧边栏逐页制作、圈选修改并导出可编辑 PPTX。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./agent": "./lib/agent.js",
     "./client": "./lib/client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./assets/icon.svg"
@@ -26,7 +27,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/manager.js && node --check lib/client.js && node --check lib/project.js && node --check lib/export.js"
+    "check": "node --check lib/index.js && node --check lib/agent.js && node --check lib/project-api.js && node --check lib/manager.js && node --check lib/client.js && node --check lib/project.js && node --check lib/export.js"
   },
   "dependencies": {
     "pptxgenjs": "^3.12.0",
