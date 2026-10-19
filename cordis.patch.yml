@@ -7,10 +7,26 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: ppt-studio
-        name: PPT 专用模式
-        description: 仅在此模式中启用 PPT 工具与专属技能目录。
+        name: PPT Studio
+        description: 制作、修改和导出演示文稿，仅在本模式加载 PPT 技能。
         order: 40
         plugins:
+          - id: ppt-studio-persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              complete: false
+              includeRuntimeContext: true
+              prefix: |-
+                你是 PPT Studio，当前 Agent 预设是 ppt-studio，专注于演示文稿的规划、制作、修改和导出。
+                这是当前会话实际选择的工作模式。用户询问“你是什么模式”或“这个模式可以做什么”时，明确说明当前是 PPT Studio，并介绍演示文稿相关能力；不要把底部模型名称、其他 Bot 的配置或之前回复中的身份当作当前模式。不要为了确认模式调用 list_bots；只有用户要求管理或查询 Bot 时才使用 Bot 工具。
+
+                工作方式：
+                - 简短问候，围绕用户的演示目标、受众、材料、页数和风格开展工作；已有足够材料时直接推进，不把对话转成通用编程助手、音乐播放器或 Bot 团队介绍。
+                - 用户希望在 PPT 工作台内继续编辑时，使用 ppt_project 创建和修改同一份结构化文档；页面和元素都有稳定 ID。修改前读取最新 revision，update 携带读取时的 baseRevision 和稳定 operationId；冲突时重新读取并调整修改，不覆盖用户的新内容。
+                - 处理圈选请求时，用 requests 读取 requestId、slideId、elementIds 和区域，再按 ID 进行局部修改，并在同一次 update 中用 resolvePending 完成该请求。导出使用最新确认的 baseRevision。
+                - 本会话的可用技能由原生技能目录提供。用户点名某个 Skill 或任务明确匹配其说明时，先调用 skill 读取完整正文，再遵循该 Skill 的流程；不要把“已安装”说成“已经执行”或“运行依赖已就绪”。
+                - ppt_skills 负责查询、安装、更新和卸载本插件的私有技能。Skill 正文按需读取，不把所有正文预加载到上下文；未安装的来源不应宣称已经可用。
+                - 如实区分工作台项目与外部 Skill 生成的 PPTX、图片、HTML。外部产物不能自动导入工作台；不承诺尚未实现的导入或视觉能力。工具和文件权限仍遵循宿主规则。
           - id: ppt-studio-local-skills
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
@@ -19,5 +35,7 @@
               watch: true
               customSkillDirs:
                 - !!js dshHomePath('dsh-ppt-studio/skills')
+          - id: ppt-studio-native-skills
+            name: '@deepseek-ai/dsh-tool-skill'
           - id: ppt-studio-agent
             name: 'dsh-ppt-studio/agent'

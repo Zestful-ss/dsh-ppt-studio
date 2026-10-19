@@ -10,7 +10,7 @@
 - **结构化项目**：页面与元素都有稳定 ID，支持撤销、自动保存、版本冲突提示。
 - **圈选修改**：在画布上框选区域，写下要求，生成一条待处理的修改请求，AI 读取后按区域和元素 ID 修改同一项目。
 - **导出 PPTX**：文字、基础形状、表格和常用图表导出为 PowerPoint 原生对象；图片保持图片。无法原生表达的内容会被明确报告，不会整页转成截图。
-- **按 preset 隔离**：`ppt_project` / `ppt_skills` 工具和 PPT 专属技能只注册在「PPT 专用模式」preset。标准模式及其他 preset 看不到这些工具或技能；项目 API 也会校验当前会话的 preset。
+- **按 preset 隔离**：PPT 身份说明、`ppt_project` / `ppt_skills` 工具和本插件的技能目录只在「PPT Studio」preset 中生效。原生 `skill` 工具按需读取技能正文；Standard 及其他 preset 不会收到这些专属注册，项目 API 也会校验当前会话的 preset。
 
 ## 安装
 
@@ -22,7 +22,7 @@ https://github.com/Zestful-ss/dsh-ppt-studio
 
 安装后硬刷新浏览器（Cmd/Ctrl+Shift+R）。也可以从本地目录安装（`plugin_manager` 或 `dsh plugin add <本地路径>`），适合开发调试。
 
-打开「设置 → PPT 专用模式」，点「新建 PPT 专用会话」；也可在新建会话的 Agent 预设选择器中选 **PPT 专用模式**。**Standard 仍是默认模式**，已有会话不会被切换。Settings 页的开关只控制侧边栏入口显示；侧栏入口会再按会话 preset 验证，非 PPT 会话看不到入口，直接请求 API 也会被拒绝。
+打开「设置 → PPT Studio」管理技能与侧边栏入口；新建会话时，在 Agent 预设选择器中选 **PPT Studio**。**Standard 仍是默认模式**，已有会话不会被切换。Settings 页的开关只控制侧边栏入口显示；非 PPT 会话看不到入口，直接请求工作台 API 也会被拒绝。升级并重启 DSH 后，已有 PPT 会话会加载新的身份与技能配置，无需搬迁历史。
 
 Agent preset 隔离的是工具与 Skill 注册范围，不是操作系统安全沙箱。Skills 安装到 preset 专属目录，正文按调用加载；请只启用可信来源，并由 DSH 现有授权/沙箱策略约束可能执行的命令。Profile 仍加载一个轻量桥接与 Settings 面板：桥接只注册受会话 preset 校验的 API；项目/导出引擎要通过校验后才动态载入。
 
@@ -31,7 +31,7 @@ Agent preset 隔离的是工具与 Skill 注册范围，不是操作系统安全
 ### 依赖
 
 - DSH `0.2.1-rc.1` 及以上（`<0.3.0`）。
-- 可选：`dsh-better-sidebar` 0.28.0 及以上。未安装时侧边栏工作台不可见；在 PPT 专用 preset 中，`ppt_project` / `ppt_skills` 工具仍可用。
+- 可选：`dsh-better-sidebar` 0.28.0 及以上。未安装时侧边栏工作台不可见；在 PPT Studio preset 中，`ppt_project` / `ppt_skills` 工具仍可用。
 
 ## 数据位置
 
@@ -43,6 +43,8 @@ Agent preset 隔离的是工具与 Skill 注册范围，不是操作系统安全
 | 技能安装记录 | `$DSH_HOME/dsh-ppt-studio/state.json` |
 
 PPT 技能目录只由 PPT preset 中的 `customSkillDirs` 扫描；安装器不会再把技能链接进全局 `$DSH_HOME/skills`。
+
+PPT Studio 通过原生技能目录向模型提供已安装技能的名称与说明。任务匹配或用户点名时，模型再调用 `skill` 读取完整正文；安装不等于执行，也不代表该 Skill 的外部运行依赖已准备好。当前模式由会话所选的 preset 决定，底部模型名称只表示推理模型。
 
 `DSH_HOME` 未设置时使用 `~/.dsh`。项目文件是可读的 JSON，可以纳入你自己的版本管理。
 
@@ -78,7 +80,7 @@ PPT 技能目录只由 PPT preset 中的 `customSkillDirs` 扫描；安装器不
 
 1. 在画布上点「圈选修改」，拖出要改的区域，写下要求。
 2. 插件把 `slideId`、命中的 `elementIds`、归一化区域和说明写入项目的 `pending`。
-3. 在对话里让 AI 处理这条请求（例如「处理 PPT 的修改请求」），模型用 `ppt_project` 读取 `requests`，再用 `update` 提交操作。
+3. 在对话里让 AI 处理这条请求（例如「处理 PPT 的修改请求」）。模型用 `ppt_project` 读取 `requests`，需要完整元素属性时用 `read` 的 `slideId` / `elementIds` 读取选区，再携带最新 `baseRevision`、唯一 `operationId` 和 `operations` 提交 `update`；修改与 `resolvePending` 在同一次提交中完成。
 4. 若期间你手动改过页面，写入会因版本不一致被拒绝，AI 需要重新读取后再改。
 
 ## 边界

@@ -1,6 +1,6 @@
 {
   "name": "dsh-ppt-studio",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "PPT Studio for DSH：在侧边栏逐页制作、圈选修改并导出可编辑 PPTX。",
   "type": "module",
   "main": "lib/index.js",
@@ -65,8 +65,18 @@
     "slides"
   ],
   "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-persona": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "jszip": "^3.10.2",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "yaml": "^2.9.1"
   }
 }

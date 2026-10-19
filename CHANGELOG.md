@@ -1,3 +1,13 @@
+# 0.5.2
+
+修复 PPT 模式：
+
+- 在 `ppt-studio` preset 中挂载原生 `dsh-persona`，明确 PPT Studio 身份、制作流程与工作台边界，保留运行时上下文；Standard 的身份与默认预设保持不变。
+- 在同一 preset 中挂载原生 `dsh-tool-skill`，已安装技能的摘要可进入模型目录，正文通过 `skill` 按需加载；专属技能不进入其他模式。
+- 统一当前模式名称为「PPT Studio」，修正设置页与安装说明中已移除的会话创建入口。
+- 补齐 `ppt_project` 的公开参数：`baseRevision`、`operationId`、`slideId`、`elementIds`；声明 `resolvePending` 等操作所需字段，选区读取向模型返回完整元素属性。
+- 新增原生宿主 SDK 回归验证，覆盖身份隔离、技能目录与加载，以及按公开参数完成创建、修改、幂等重放、选区读取、旧版本拒绝与 PPTX 导出。
+
 # 0.5.1
 
 修复：

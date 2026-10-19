@@ -33,8 +33,6 @@ test('DSH rc.2 discovers custom roots and loads newly installed skills through i
   invalidateSkills: () => invalidateControl?.(),
  });
 
- await manager.ensureDefaults();
- await manager.running;
 
  await ctx.skills.list();
  await manager.start('install',['fresh']);await manager.running;assert.equal(manager.job.state,'done',manager.job.message);
