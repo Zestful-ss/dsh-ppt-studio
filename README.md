@@ -14,13 +14,15 @@
 
 ## 安装
 
-```sh
-dsh plugin --profile <profile> add https://github.com/Zestful-ss/dsh-ppt-studio
+在 DSH 的「插件 → 添加插件」中粘贴仓库地址：
+
+```text
+https://github.com/Zestful-ss/dsh-ppt-studio
 ```
 
-或在 DSH 的「插件 → 添加插件」中粘贴仓库地址安装，然后硬刷新浏览器（Cmd/Ctrl+Shift+R）。
+安装后硬刷新浏览器（Cmd/Ctrl+Shift+R）。也可以从本地目录安装（`plugin_manager` 或 `dsh plugin add <本地路径>`），适合开发调试。
 
-安装后，在右侧栏的「+」菜单里选择 **PPT 工作台**。
+装好后，在右侧栏的「+」菜单里选择 **PPT 工作台**。
 
 ### 依赖
 

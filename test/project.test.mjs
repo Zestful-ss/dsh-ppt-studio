@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectStore, applyOperations, newProject, normalizeProject, ProjectError } from '../lib/project.js';
+import { ProjectStore, applyOperations, lossless, newProject, normalizeProject, ProjectError } from '../lib/project.js';
 import { buildPptx, sanitizeFilename } from '../lib/export.js';
 
 const temp = () => mkdtemp(join(tmpdir(), 'ppt-studio-'));
@@ -92,4 +92,15 @@ test('export produces a real pptx with native slide parts', async () => {
 
 test('filenames are safe', () => {
   assert.equal(sanitizeFilename('a/b:c*d?.pptx'), 'a b c d .pptx');
+});
+
+test('project payloads survive lossless JSON validation', () => {
+  const project = newProject('无损');
+  for (const slide of project.slides) {
+    for (const key of Object.keys(slide)) assert.notEqual(slide[key], undefined, `slide.${key} is undefined`);
+  }
+  const payload = lossless({ title: project.title, project, dropped: undefined });
+  assert.equal('dropped' in payload, false);
+  assert.equal(JSON.stringify(JSON.parse(JSON.stringify(payload))), JSON.stringify(payload));
+  assert.deepEqual(lossless({ b: [undefined, 1], c: { d: undefined, e: Number.NaN } }), { b: [null, 1], c: { e: null } });
 });
