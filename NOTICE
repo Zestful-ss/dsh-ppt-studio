@@ -1,14 +1,33 @@
-Planners Form
-Copyright 2026 thePlannerIvan / 阿祖不看 TVC
+PPT Studio for DSH
+Copyright 2026 Zestful-ss
 
-Contains DSH Review Dock (AGPL-3.0-only), maintained by the same author.
-The vendored snapshot is copied from the existing local dsh-review-dock project,
-including its session-scoped panel fixes. It is not represented as an unchanged
-copy of upstream commit 18759778578da9ffab595c9adb75b64611a2732d.
-See vendor/review-dock/NOTICE and LICENSE.
+This project is a modified fork of Planners Form
+(https://github.com/thePlannerIvan/planners-form),
+Copyright 2026 thePlannerIvan / 阿祖不看 TVC, licensed AGPL-3.0-only.
 
-The icon uses the non-serif geometric Logics design from logics-branding.
+Modifications made in 2026-10 (see git history for the full record):
+- Renamed the package, plugin id and storage root to dsh-ppt-studio.
+- Replaced the Planners review-dock integration with a sidebar workbench
+  registered through dsh-better-sidebar, plus a project store, a revision-guarded
+  HTTP route and a ppt_project agent tool.
+- Added native PPTX export built on PptxGenJS, and removed the vendored
+  review-dock dependency and its bundled copies.
+- Removed the forced planners-review-core dependency from install plans and
+  dropped the retired Planners settings page from the client half.
+
+The DSH Review Dock component shipped by the upstream project is NOT included
+in this fork.
+
+Design references (no source copied):
+- PPTist (https://github.com/pipipi-pikachu/PPTist), AGPL-3.0-only —
+  slide/element model shape, editing interactions and the native export mapping
+  were studied and reimplemented for this plugin.
+- vercel-labs/skills (https://github.com/vercel-labs/skills), MIT —
+  skill discovery and frontmatter handling approach.
+
+Third-party runtime dependencies retain their own licenses:
+- PptxGenJS — MIT (https://github.com/gitbrent/PptxGenJS)
+- tar — ISC
+
+The icon in assets/icon.svg is original artwork for this fork.
 Inter font licensing is preserved in assets/inter-OFL.txt.
-
-Production dependencies are intentionally included for build-free GitHub installation.
-Each dependency retains its own license in node_modules/<package>/LICENSE*.

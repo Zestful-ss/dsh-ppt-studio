@@ -1,7 +1,7 @@
 - insert:
-    - id: planners-form-local-skills
+    - id: dsh-ppt-studio-local-skills
       name: '@deepseek-ai/dsh-skill-filesystem'
       config:
-        providerName: planners-form-local
-    - id: planners-form
-      name: planners-form
+        providerName: dsh-ppt-studio-local
+    - id: dsh-ppt-studio
+      name: dsh-ppt-studio

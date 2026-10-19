@@ -14,21 +14,25 @@ test('proposal installs and updates hidden companion Skills through the same dep
  m.start('update',['planners-proposal-system']);await m.running;assert.equal(m.job.state,'done',m.job.message);
  for(const id of ['sparkling','storytelling','slide-copy'])assert.equal((await m.state()).installed[id].revision,next);
 });
-test('settings renders invocation names but hides companion rows in both lists',async()=>{
- const {runInNewContext}=await import('node:vm');let plugin,hook=0;
- const data={packages:catalog.packages.map(p=>({...p,ownership:'absent'})),environment:{node:'24.21.0',pythonReady:false}};
- const React={createElement:(type,props,...children)=>({type,props,children}),useState:initial=>[hook++===0?data:initial,()=>{}],useRef:current=>({current}),useEffect:()=>{}};
- runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,window:{location:{href:'http://localhost/'}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
- const tree=JSON.stringify(plugin.Page());
- for(const id of ['sparkling','storytelling','slide-copy'])assert.ok(!tree.includes(id));
- for(const id of ['planners-proposal-system','planners-bypage','video-idea-system','video-craft'])assert.ok(tree.includes(id));
+test('the client bundle registers the PPT workbench tab and nothing else',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ let plugin=null;
+ const React={createElement:(type,props,...children)=>({type,props,children}),useState:initial=>[initial,()=>{}],useRef:current=>({current}),useEffect:()=>{},useMemo:fn=>fn(),useCallback:fn=>fn};
+ runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,window:{location:{href:'http://localhost/'}},__ModuleLoader__:{load:({id,factory})=>{assert.equal(id,'dsh-ppt-studio');plugin=factory(()=>React);}}});
+ assert.equal(plugin.inject.includes('slots'),true);
+ const registered=[];
+ const ctx={inject:(_names,cb)=>cb({effect:fn=>fn(),betterSidebar:{registerTab:descriptor=>{registered.push(descriptor);return()=>{}}}})};
+ plugin.apply(ctx);
+ assert.equal(registered.length,1);
+ assert.equal(registered[0].id,'dsh-ppt-studio:workbench');
+ assert.equal(registered[0].single,true);
+ assert.equal(typeof registered[0].component,'function');
 });
-test('installed rows show an accessible checkmark instead of a disabled checkbox',async()=>{
- const {runInNewContext}=await import('node:vm');let plugin,hook=0;
- const data={packages:[{id:'existing',title:'已有能力',ownership:'external'},{id:'managed',title:'托管能力',ownership:'managed'},{id:'new',title:'新能力',ownership:'absent',available:true}],environment:{node:'24',pythonReady:false}};
- const React={createElement:(type,props,...children)=>({type,props,children}),useState:initial=>[hook++===0?data:initial,()=>{}],useRef:current=>({current}),useEffect:()=>{}};
+test('the client half does not reuse the retired Planners settings page',async()=>{
+ let plugin=null;
+ const {runInNewContext}=await import('node:vm');
+ const React={createElement:()=>null,useState:initial=>[initial,()=>{}],useRef:current=>({current}),useEffect:()=>{},useMemo:fn=>fn(),useCallback:fn=>fn};
  runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,window:{location:{href:'http://localhost/'}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
- const nodes=[];function visit(x){if(!x||typeof x!=='object')return;if(Array.isArray(x)){x.forEach(visit);return;}nodes.push(x);x.children?.forEach(visit);}visit(plugin.Page());
- assert.equal(nodes.filter(n=>n.props?.role==='img'&&n.children.includes('✅')).length,2);
- assert.equal(nodes.filter(n=>n.type==='input'&&n.props.type==='checkbox').length,1);
+ assert.equal(plugin.Page,undefined);
+ assert.deepEqual(Object.keys(plugin).sort(),['apply','inject']);
 });

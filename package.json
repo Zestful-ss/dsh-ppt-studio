@@ -1,72 +1,66 @@
 {
-  "name": "planners-form",
-  "version": "0.1.4",
-  "description": "DSH 设置中的 Planners 套件管理：环境准备、Skill 选装与更新。",
+  "name": "dsh-ppt-studio",
+  "version": "0.2.0",
+  "description": "PPT Studio for DSH：在侧边栏逐页制作、圈选修改并导出可编辑 PPTX。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./lib/client.js"
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./assets/icon.svg"
   },
   "files": [
     "lib",
     "assets",
+    "locale",
     "catalog.json",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "NOTICE",
-    "vendor",
-    "COMPATIBILITY.md",
-    "SECURITY.md"
+    "NOTICE"
   ],
   "engines": {
     "node": ">=20",
-    "dsh": "^0.2.0-rc.2"
+    "dsh": ">=0.2.1-rc.1 <0.3.0"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/manager.js && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/manager.js && node --check lib/client.js && node --check lib/project.js && node --check lib/export.js"
   },
   "dependencies": {
-    "dsh-review-dock": "file:vendor/review-dock",
+    "pptxgenjs": "^3.12.0",
     "tar": "7.5.22"
   },
-  "peerDependencies": {
-    "@deepseek-ai/dsh": "^0.2.0-rc.2"
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web",
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-settings",
-        "dsh-review-dock"
-      ]
+      "platform": "web"
     }
   },
-  "author": "thePlannerIvan <Lawyif@163.com>",
+  "author": "Zestful-ss",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thePlannerIvan/planners-form.git"
+    "url": "git+https://github.com/Zestful-ss/dsh-ppt-studio.git"
   },
-  "homepage": "https://github.com/thePlannerIvan/planners-form#readme",
+  "homepage": "https://github.com/Zestful-ss/dsh-ppt-studio#readme",
   "bugs": {
-    "url": "https://github.com/thePlannerIvan/planners-form/issues"
+    "url": "https://github.com/Zestful-ss/dsh-ppt-studio/issues"
   },
   "keywords": [
     "dsh",
     "deepseek-harness",
     "plugin",
-    "skills",
-    "planners",
-    "review"
-  ],
-  "bundleDependencies": [
-    "tar",
-    "dsh-review-dock"
+    "ppt",
+    "pptx",
+    "slides"
   ]
 }

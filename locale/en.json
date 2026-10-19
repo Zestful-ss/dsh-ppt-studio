@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "PPT Studio",
+    "description": "Build and edit slide decks in the sidebar, select an area to revise, and export editable PPTX."
+  },
+  "tab": {
+    "title": "PPT Studio",
+    "description": "Edit slides page by page and export PPTX."
+  }
+}

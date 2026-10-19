@@ -1,20 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import {mkdtemp,rm,writeFile,mkdir,lstat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {readFile,stat} from 'node:fs/promises';
+import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import * as tar from 'tar';
 const root=fileURLToPath(new URL('..',import.meta.url));
-test('a Git source archive imports without dependencies inherited from the developer machine',async t=>{
- const temp=await mkdtemp(join(tmpdir(),'pf-source-import-'));t.after(()=>rm(temp,{recursive:true,force:true}));
- const tree=execFileSync('git',['write-tree'],{cwd:root,encoding:'utf8'}).trim();
- const archive=join(temp,'source.tar');await writeFile(archive,execFileSync('git',['archive',tree],{cwd:root,maxBuffer:20*1024*1024}));
- await tar.x({file:archive,cwd:temp});
- assert.equal((await lstat(join(temp,"node_modules/dsh-review-dock"))).isSymbolicLink(),false,"Git-hosted pnpm installs omit symlinked bundles");
- const packed=JSON.parse(execFileSync('npm',['pack','--ignore-scripts','--offline','--cache',join(temp,'cache'),'--json'],{cwd:temp,encoding:'utf8'}))[0];
- const installed=join(temp,'installed');await mkdir(installed);await tar.x({file:join(temp,packed.filename),cwd:installed});
- const result=execFileSync(process.execPath,['--input-type=module','-e',`const p=await import(${JSON.stringify(new URL('file://'+join(installed,'package/lib/index.js')).href)});if(p.name!=='planners-form'||typeof p.apply!=='function')process.exit(2);console.log('host entry ready')`],{cwd:temp,encoding:'utf8',env:{PATH:process.env.PATH,HOME:temp}});
- assert.match(result,/host entry ready/);
+const manifest=JSON.parse(await readFile(join(root,'package.json'),'utf8'));
+
+// `files` decides what a published or Git-installed archive contains. Every runtime
+// module and resource the host or client half loads must be covered by it.
+const covered=rel=>manifest.files.some(entry=>rel===entry||rel.startsWith(`${entry}/`));
+
+test('the published file list covers every runtime entry and resource',async()=>{
+ for(const rel of ['lib/index.js','lib/client.js','lib/project.js','lib/export.js','lib/manager.js','lib/skill-discovery.js','catalog.json','cordis.patch.yml','assets/icon.svg','locale/en.json','locale/zh.json']){
+  assert.ok(covered(rel),`package.json files is missing ${rel}`);
+  await stat(join(root,rel));
+ }
+ assert.equal(manifest.name,'dsh-ppt-studio');
+ assert.equal(manifest.dsh.bundle.patch,'./cordis.patch.yml');
+ assert.equal(manifest.dsh.client.platform,'web');
+ assert.equal(manifest.exports['./client'],'./lib/client.js');
+});
+
+test('every relative import of the host entry resolves inside the package',async()=>{
+ const source=await readFile(join(root,'lib','index.js'),'utf8');
+ const specifiers=[...source.matchAll(/^import\s[^;]*?from\s+'(\.{1,2}\/[^']+)';/gm)].map(match=>match[1]);
+ assert.ok(specifiers.length>=3);
+ for(const specifier of specifiers){
+  const target=join(dirname(join(root,'lib','index.js')),specifier);
+  await stat(target);
+ }
 });

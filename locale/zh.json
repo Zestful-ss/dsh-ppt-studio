@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "PPT 工作台",
+    "description": "在侧边栏逐页制作与修改演示文稿，圈选区域交给 AI 调整，导出可编辑 PPTX。"
+  },
+  "tab": {
+    "title": "PPT 工作台",
+    "description": "逐页预览、直接编辑并导出 PPTX。"
+  }
+}

@@ -1,87 +1,93 @@
-<p align="center">
-  <img src="assets/icon.svg" width="80" alt="Planners Form" />
-</p>
+# PPT Studio for DSH
 
-<h1 align="center">Planners Form</h1>
+在 DSH 侧边栏里制作和修改演示文稿：逐页预览、直接编辑、圈选一块区域交给 AI 修改，最后导出可编辑的 PPTX。
 
-<p align="center"><strong>在 DSH 里讨论方案、写作、做 PPT、剪视频。</strong></p>
+插件由 AI 与人在同一份项目文件上协作：编辑器改动、AI 改动和导出共用同一个版本号，后写入的一方必须基于最新版本，不会静默覆盖。
 
-Planners Form 是一个为 DSH 准备的办公插件，也是 Planners 系列工具的统一入口。把一个想法聊清楚，把一堆资料写成方案，再把内容做成 PPT 或视频——你可以根据手上的工作，装上需要的能力，在对话里一步步完成。
+## 能做什么
 
-复制仓库链接，在 DSH 中点一下安装。之后需要什么功能，就在设置里选择，不必逐个寻找和配置配套 Skill。
+- **侧边栏工作台**：作为 `dsh-better-sidebar` 的一个页签打开，缩略图逐页切换，画布上点选元素即可改文字、改颜色、移动与缩放。
+- **结构化项目**：页面与元素都有稳定 ID，支持撤销、自动保存、版本冲突提示。
+- **圈选修改**：在画布上框选区域，写下要求，生成一条待处理的修改请求，AI 读取后按区域和元素 ID 修改同一项目。
+- **导出 PPTX**：文字、基础形状、表格和常用图表导出为 PowerPoint 原生对象；图片保持图片。无法原生表达的内容会被明确报告，不会整页转成截图。
+- **AI 工具**：`ppt_project` 提供 list / read / create / update / export / requests，可直接让模型建稿、改页、导出。
 
-## 从想法到交付，你可以用它做什么？
+## 安装
 
-### 一起把方案想明白
-
-拿着 Brief、研究资料，或者一个还没想清楚的问题开始。和 AI 讨论业务卡点、比较不同方向，逐步形成有判断、有依据的方案主线。
-
-### 把资料写成可以用的内容
-
-把主线展开成完整的逐页稿，梳理每一页要讲什么、用什么证据、配什么素材。也可以先分析访谈、评论或表格数据，再把发现带回方案。
-
-### 把内容做成 PPT
-
-从逐页稿或已有材料出发，制作页面，在审阅中提出修改，最后输出可编辑的 PPT。内容调整和页面返修可以在同一段工作里继续推进。
-
-### 从视频创意走到成片
-
-讨论选题和创意，把主张写成能直接念的口播稿；有了录音、素材或页面后，继续完成剪辑、字幕、画面制作和成片审阅。
-
-这些能力可以接着用，也可以单独用。只需要写方案，就装方案相关的功能；今天要剪一条视频，就从视频制作开始。
-
-## 装进 DSH
-
-在 DSH 中打开 **插件 → 添加插件**，粘贴下面的地址，点击 **安装**：
-
-```text
-https://github.com/thePlannerIvan/planners-form
+```sh
+dsh plugin --profile <profile> add https://github.com/Zestful-ss/dsh-ppt-studio
 ```
 
-安装并启用后，打开 **设置 → Planners Form**，勾选需要的功能，点击 **安装所选 Skill**。相关的辅助 Skill 会一起准备好。
+或在 DSH 的「插件 → 添加插件」中粘贴仓库地址安装，然后硬刷新浏览器（Cmd/Ctrl+Shift+R）。
 
-> 安装框里填写上面的仓库地址即可。GitHub 的 Release 展示页不是安装地址。
+安装后，在右侧栏的「+」菜单里选择 **PPT 工作台**。
 
-## 回到对话，开始工作
+### 依赖
 
-装好后，直接告诉 DSH 你想做什么，并带上对应的 Skill 名称。例如：
+- DSH `0.2.1-rc.1` 及以上（`<0.3.0`）。
+- 可选：`dsh-better-sidebar` 0.28.0 及以上。未安装时插件照常加载，但侧边栏页签不会出现；`ppt_project` 工具与导出仍然可用。
 
-> 用 planners-proposal-system 和我讨论这份 Brief，先把方案方向和主线定下来。
+## 数据位置
 
-> 用 planners-bypage 把刚才确认的主线展开成完整的逐页内容。
+| 内容 | 位置 |
+|---|---|
+| 项目文件 | `$DSH_HOME/dsh-ppt-studio/projects/<projectId>.json` |
+| 导出的 PPTX | `$DSH_HOME/dsh-ppt-studio/exports/<projectId>/` |
+| 技能安装记录 | `$DSH_HOME/dsh-ppt-studio/state.json` |
 
-> 用 planners-ppt-hell 把这份逐页稿做成 PPT，我会在审阅页里提修改。
+`DSH_HOME` 未设置时使用 `~/.dsh`。项目文件是可读的 JSON，可以纳入你自己的版本管理。
 
-> 用 video-craft 剪这段口播，去掉重复和停顿，加上字幕，先给我审阅。
+## 项目格式
 
-需要你看稿、看页面或确认成片时，对应 Skill 会打开审阅页。你继续在对话中提出意见、调整内容，直到完成交付。
+```jsonc
+{
+  "schemaVersion": 1,
+  "id": "p_…",
+  "title": "季度汇报",
+  "revision": 3,
+  "viewport": { "width": 1000, "height": 562.5 },
+  "theme": { "backgroundColor": "#ffffff", "fontColor": "#1f2430", "fontName": "Inter", "themeColors": [] },
+  "slides": [
+    {
+      "id": "s_…",
+      "note": "讲者备注",
+      "elements": [
+        { "id": "e_…", "type": "text", "x": 90, "y": 180, "w": 820, "h": 120,
+          "text": "结论先行", "fontSize": 54, "color": "#1f2430", "bold": true, "align": "left" }
+      ]
+    }
+  ],
+  "pending": []
+}
+```
 
-## 按工作选择能力
+坐标以 1000 单位宽的逻辑画布表示，导出时换算为英寸；字号按 px→pt 换算。
 
-| 你想完成的工作 | 对应 Skill |
-| --- | --- |
-| 讨论策略、组织方案主线 | `planners-proposal-system` |
-| 写完整的逐页内容 | `planners-bypage` |
-| 制作和修改可编辑 PPT | `planners-ppt-hell` |
-| 分析访谈、评论与开放文本 | `planners-quali-box` |
-| 分析表格与结构化数据 | `planners-quanti-box` |
-| 构思视频、写口播与画面内容 | `video-idea-system` |
-| 剪辑视频、制作字幕与成片 | `video-craft` |
+元素类型：`text`、`shape`、`image`、`chart`、`table`。
 
-方案研讨、叙事和幻灯片文案所用的辅助能力，会随相关功能一起安装。日常在 **设置 → Planners Form** 中检查和更新已安装的 Skill 即可。
+## AI 修改流程
 
-## 使用前的小提示
+1. 在画布上点「圈选修改」，拖出要改的区域，写下要求。
+2. 插件把 `slideId`、命中的 `elementIds`、归一化区域和说明写入项目的 `pending`。
+3. 在对话里让 AI 处理这条请求（例如「处理 PPT 的修改请求」），模型用 `ppt_project` 读取 `requests`，再用 `update` 提交操作。
+4. 若期间你手动改过页面，写入会因版本不一致被拒绝，AI 需要重新读取后再改。
 
-目前支持 **DSH 0.2.x**（声明 `^0.2.0-rc.2`；0.2.1-rc.1 已实测）。安装和下载配套功能需要联网。首次使用视频制作时，还需按 [Video Craft 安装说明](https://github.com/thePlannerIvan/video-craft/blob/main/install.md) 配置渲染工具。
+## 边界
 
-插件的新版本可在 [Releases](https://github.com/thePlannerIvan/planners-form/releases) 获取。遇到问题，欢迎在 [Issues](https://github.com/thePlannerIvan/planners-form/issues) 留下反馈。
+- 导入既有 PPTX 尚未实现。当前以插件生成的结构化项目为主，编辑外部 PPT 请先用其他工具转成受支持的格式。
+- 导出保真度取决于 PptxGenJS：渐变填充、图案、公式与超出现在支持范围的特效会降级或被报告为警告。
+- 模板适配、讲者备注增强、渲染质检等技能能力仍在规划中。
 
-## 开源与作者
+## 开发
 
-由 **阿祖不看 TVC / thePlannerIvan** 创建与维护。
+```sh
+pnpm install
+npm run check   # 语法检查
+npm test        # 单元测试 + 路由端到端测试
+```
 
-Planners Form 的源码以 **AGPL-3.0-only** 开放，欢迎阅读、反馈和参与改进。
+## 许可证与来源
 
-[个人网站](https://demyth.info) · [许可证](LICENSE) · [作者与第三方声明](NOTICE) · [开发文档](DEVELOPMENT.md) · [兼容性记录](COMPATIBILITY.md) · [安全反馈](SECURITY.md)
+本项目是 [Planners Form](https://github.com/thePlannerIvan/planners-form)（AGPL-3.0-only）的 Fork，沿用同一许可证，保留原作者版权与修改说明，见 [NOTICE](./NOTICE)。
 
-联系：Lawyif@163.com
+编辑器交互与导出映射参考了 [PPTist](https://github.com/pipipi-pikachu/PPTist)（AGPL-3.0）的设计；技能发现逻辑参考了 [vercel-labs/skills](https://github.com/vercel-labs/skills)（MIT）；导出使用 [PptxGenJS](https://github.com/gitbrent/PptxGenJS)（MIT）。
