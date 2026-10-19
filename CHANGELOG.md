@@ -6,7 +6,7 @@
 - 安装层支持仓库内子目录：一个仓库里多个 Skill 各自成为独立条目，只复制目标目录。
 - 许可证策略：未声明许可证的来源仅展示、不可安装；`restricted` 条目在安装事务开始前就被拒绝。
 - 新工具 `ppt_skills`：`list | install | update | repair`，按需安装，装完即可被 Agent 使用。
-- 目录覆盖三类产出：原生 PPTX（ppt-master、Kami、office-academic-skill、gorden-ppt-skill、image-to-editable-ppt、cyber-ppt、slide-maker、luobo-ppt）、图片路线（codex-ppt、ppt-image-first）、网页演示（frontend-slides、guizang-ppt-skill、dashi-ppt、html-ppt）。
+- 目录共 16 个来源，14 个可安装、2 个无许可证项仅展示：原生 PPTX（ppt-master、Kami、office-academic-skill、gorden-ppt-skill、image-to-editable-ppt、cyber-ppt、slide-maker、luobo-ppt，以及受限的 gorden-super-ppt）、图片路线（codex-ppt、ppt-image-first，以及受限的 nano-banana-ppt）、网页演示（frontend-slides、guizang-ppt-skill、dashi-ppt、html-ppt）。
 
 变更：
 
