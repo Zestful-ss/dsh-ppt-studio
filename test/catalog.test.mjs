@@ -5,14 +5,18 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {Manager} from '../lib/manager.js';
 const catalog=JSON.parse(await readFile(new URL('../catalog.json',import.meta.url),'utf8'));
-test('proposal installs and updates hidden companion Skills through the same dependency plan',async t=>{
- const home=await mkdtemp(join(tmpdir(),'pf-companions-'));t.after(()=>rm(home,{recursive:true,force:true}));
+test('a catalog skill installs from its pinned source and updates to the checked revision',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'ppt-catalog-'));t.after(()=>rm(home,{recursive:true,force:true}));
  const next='f'.repeat(40);
  const m=new Manager({home,catalog,fetcher:async()=>new Response(JSON.stringify({sha:next})),download:async(p,d)=>{await mkdir(d,{recursive:true});await writeFile(join(d,'SKILL.md'),`---\nname: ${p.id}\n---\n`);}});
- m.start('install',['planners-proposal-system']);await m.running;assert.equal(m.job.state,'done',m.job.message);
- for(const id of ['sparkling','storytelling','slide-copy']) {assert.ok((await m.state()).installed[id]);assert.equal(catalog.packages.find(p=>p.id===id).hidden,true);}
- m.start('update',['planners-proposal-system']);await m.running;assert.equal(m.job.state,'done',m.job.message);
- for(const id of ['sparkling','storytelling','slide-copy'])assert.equal((await m.state()).installed[id].revision,next);
+ const target='image-to-editable-ppt';
+ m.start('install',[target]);await m.running;assert.equal(m.job.state,'done',m.job.message);
+ assert.ok((await m.state()).installed[target]);
+ const entry=catalog.packages.find(p=>p.id===target);
+ assert.equal(entry.repository,'ningzimu/image-to-editable-ppt-skill');
+ assert.equal(entry.path,'skills/image-to-editable-ppt');
+ m.start('update',[target]);await m.running;assert.equal(m.job.state,'done',m.job.message);
+ assert.equal((await m.state()).installed[target].revision,next);
 });
 test('the client bundle registers the PPT workbench tab and nothing else',async()=>{
  const {runInNewContext}=await import('node:vm');

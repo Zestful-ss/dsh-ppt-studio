@@ -88,8 +88,38 @@ npm run check   # 语法检查
 npm test        # 单元测试 + 路由端到端测试
 ```
 
+## 技能库（按需安装）
+
+插件内置一个多来源技能目录（`catalog.json`），每条记录一个 GitHub 仓库里的具体 Skill：**锁定 commit、记录许可证、按需安装**，装完即可被 Agent 使用，不装就不占任何上下文。
+
+用 `ppt_skills` 工具操作：
+
+```text
+ppt_skills { "action": "list" }                     # 看目录与安装状态
+ppt_skills { "action": "install", "id": "ppt-master" }
+ppt_skills { "action": "update",  "id": "ppt-master" }
+ppt_skills { "action": "repair" }                   # 修复全部已安装项
+```
+
+目录按产出一共分三类：
+
+| 分类 | 代表来源 | 说明 |
+|---|---|---|
+| `pptx-native` | ppt-master、Kami、office-academic-skill、gorden-ppt-skill、image-to-editable-ppt、cyber-ppt、slide-maker、luobo-ppt | 产出可编辑 PPTX，是主路线 |
+| `image` | codex-ppt、ppt-image-first | 整页图片型，视觉强但不逐字可编辑 |
+| `html` | frontend-slides、guizang-ppt-skill、dashi-ppt、html-ppt | 网页演示，风格参考用 |
+
+规则：
+
+- 一个仓库可以有多个 Skill，各自是独立条目（`repository` + `path`），安装时只复制目标目录。
+- 安装前校验 `SKILL.md` 的 `name` 与目录条目一致，避免装错。
+- 未声明许可证的来源只展示、**不可安装**；带自动更新脚本的来源（如 gorden-ppt-skill）需在安装后剥离该步骤。
+- 远端 Skill 里的安装指令不会随安装自动执行。
+
 ## 许可证与来源
 
 本项目是 [Planners Form](https://github.com/thePlannerIvan/planners-form)（AGPL-3.0-only）的 Fork，沿用同一许可证，保留原作者版权与修改说明，见 [NOTICE](./NOTICE)。
 
 编辑器交互与导出映射参考了 [PPTist](https://github.com/pipipi-pikachu/PPTist)（AGPL-3.0）的设计；技能发现逻辑参考了 [vercel-labs/skills](https://github.com/vercel-labs/skills)（MIT）；导出使用 [PptxGenJS](https://github.com/gitbrent/PptxGenJS)（MIT）。
+
+目录中各来源的许可证随条目记录（MIT / Apache-2.0 / AGPL-3.0），安装只是把内容放到本地技能目录，版权仍归各作者所有。
