@@ -62,13 +62,28 @@ test('route: guarded, creates, saves and exports', async () => {
     }, boot.token);
     assert.equal(missingBase.status, 400);
 
+    const savedRequest = { ...created.project, title: '改过的标题' };
     const saved = await (await call('POST', {
       action: 'save',
-      project: { ...created.project, title: '改过的标题' },
+      project: savedRequest,
       baseRevision: created.project.revision,
       operationId: 'op_save_route_1',
     }, boot.token)).json();
     assert.equal(saved.project.revision, created.project.revision + 1);
+    assert.equal(saved.operationId, 'op_save_route_1');
+    assert.equal(saved.appliedRevision, saved.revision);
+    assert.equal(saved.replayed, false);
+
+    const replay = await (await call('POST', {
+      action: 'save',
+      project: savedRequest,
+      baseRevision: created.project.revision,
+      operationId: 'op_save_route_1',
+    }, boot.token)).json();
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.revision, saved.revision);
+    assert.equal(replay.appliedRevision, saved.revision);
+    assert.equal(replay.project.title, '改过的标题');
 
     const conflict = await call('POST', {
       action: 'save',

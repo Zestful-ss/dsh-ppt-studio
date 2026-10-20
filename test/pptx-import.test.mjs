@@ -5,7 +5,9 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import JSZip from 'jszip';
+import PptxGenJS from 'pptxgenjs';
 import { importPptx, exportImportedPptx } from '../lib/pptx.js';
+import { buildPptx } from '../lib/export.js';
 import { applyOperations, normalizeProject, ProjectError } from '../lib/project.js';
 
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -284,6 +286,94 @@ test('real OOXML import: order, geometry, inherited styles, group transform, not
   assert.equal(bindings.backdrops[slide2.backdropId].includeMaster, true);
   assert.equal(bindings.backdrops[slide3.backdropId].includeMaster, false);
   assert.equal(bindings.package.defaultLayout, 'ppt/slideLayouts/slideLayout2.xml');
+});
+
+// 2x1 PNG: a real image whose aspect ratio differs from a square frame.
+const PNG_2X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAEElEQVR4nGP4z8DAwPCfAQAI/wH/eBaFJAAAAABJRU5ErkJggg==';
+
+test('native export writes radius, stroke visibility, image fit and table alignment', async () => {
+  const image = `data:image/png;base64,${PNG_2X1}`;
+  const project = normalizeProject({
+    title: 'Formats',
+    slides: [{
+      id: 's_formats',
+      elements: [
+        { id: 'e_round', type: 'shape', shape: 'roundRect', x: 100, y: 100, w: 200, h: 100, radius: 40, fill: '#ffffff', stroke: '#112233', strokeWidth: 2 },
+        { id: 'e_square', type: 'shape', shape: 'roundRect', x: 400, y: 100, w: 200, h: 100, radius: 0, fill: '#ffffff', stroke: '#112233', strokeWidth: 0 },
+        { id: 'e_table', type: 'table', x: 100, y: 250, w: 400, h: 160, rotate: 30, rows: [['A', 'B'], ['1', '2']], align: 'center' },
+        { id: 'e_contain', type: 'image', src: image, fit: 'contain', x: 100, y: 450, w: 200, h: 200 },
+        { id: 'e_cover', type: 'image', src: image, fit: 'cover', x: 400, y: 450, w: 200, h: 200 },
+      ],
+    }],
+  });
+  const dir = await temp();
+  try {
+    const out = await buildPptx(project, { outDir: dir });
+    const zip = await JSZip.loadAsync(await readFile(out.path));
+    const xml = await zip.file('ppt/slides/slide1.xml').async('text');
+    const shapeXml = id => (xml.match(new RegExp(`<p:sp>(?:(?!</p:sp>)[\\s\\S])*?name="${id}"[\\s\\S]*?</p:sp>`)) || [''])[0];
+    const round = shapeXml('e_round');
+    assert.match(round, /prst="roundRect"/, round);
+    assert.match(round, /<a:gd name="adj" fmla="val 40000"\/>/, round);
+    assert.match(round, /<a:solidFill><a:srgbClr val="112233"\/><\/a:solidFill>/, round);
+    const square = shapeXml('e_square');
+    assert.match(square, /prst="rect"/, square);
+    assert.ok(!/<a:ln[^>]*>[\s\S]*?<a:solidFill>/.test(square), square);
+    const table = (xml.match(/<a:tbl>[\s\S]*?<\/a:tbl>/) || [''])[0];
+    assert.ok(table.includes('algn="ctr"'), table);
+    assert.ok(!table.includes('algn="l"'), table);
+    assert.match(xml, /<p:xfrm rot="1800000">/, xml);
+    const pictures = xml.match(/<p:pic>[\s\S]*?<\/p:pic>/g) || [];
+    const contain = pictures.find(pic => pic.includes('name="e_contain"')) || '';
+    const cover = pictures.find(pic => pic.includes('name="e_cover"')) || '';
+    assert.match(contain, /<a:srcRect l="0" r="0" t="-50000" b="-50000"\/>/, contain);
+    assert.match(cover, /<a:srcRect l="25000" r="25000" t="0" b="0"\/>/, cover);
+    assert.match(contain, /<a:ext cx="1828800" cy="1828800"\/>/, contain);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('import reads rounded-corner radius and table alignment defaults', async () => {
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_16x9';
+  const slide = pptx.addSlide();
+  slide.addText('圆角', { shape: pptx.ShapeType.roundRect, x: 1, y: 1, w: 4, h: 2, fill: { color: 'FFFFFF' } });
+  slide.addTable([['A', 'B'], ['1', '2']], { x: 5, y: 1, w: 4, h: 2 });
+  const { template } = await importPptx(await pptx.write({ outputType: 'nodebuffer' }), { filename: 'shapes.pptx' });
+  const round = template.slides[0].elements.find(element => element.type === 'shape' && element.shape === 'roundRect');
+  const table = template.slides[0].elements.find(element => element.type === 'table');
+  assert.ok(round);
+  // 2in high (200 canvas units) with PowerPoint's default 16667 adjustment.
+  assert.equal(round.radius, 33.33);
+  assert.equal(table.align, 'left');
+});
+
+test('legacy table baselines without alignment keep their original XML', async () => {
+  const source = await buildFixture();
+  const { template, bindings } = await importPptx(source, { filename: 'fixture.pptx' });
+  const project = projectFrom(template);
+  const slide = project.slides.find(item => item.elements.some(element => element.type === 'table'));
+  const table = slide.elements.find(element => element.type === 'table');
+  const binding = bindings.slides[slide.id].elements[table.id];
+  delete table.align;
+  delete binding.baseline.align;
+  // normalizeProject on the next save would add the default; exercise the
+  // exporter directly with the legacy shape to prove comparison compatibility.
+  const dir = await temp();
+  try {
+    const out = await exportDeck(project, bindings, dir, source);
+    const original = await JSZip.loadAsync(source);
+    const exported = await JSZip.loadAsync(out.buffer);
+    const slidePart = Object.keys(original.files).find(name => /^ppt\/slides\/slide\d+\.xml$/.test(name) && name.includes('slide2'));
+    assert.equal(
+      await exported.file(slidePart).async('text'),
+      await original.file(slidePart).async('text'),
+      'legacy tables must stay byte-for-byte identical',
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('untouched import exports the original package parts byte-for-byte', async () => {
