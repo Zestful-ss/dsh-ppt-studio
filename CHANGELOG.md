@@ -1,3 +1,8 @@
+# 0.6.5
+
+- 修复一直显示「请选择「PPT Studio」预设」的真正原因：请求处理器建立在插件根上下文上，访问未声明的 `sessionQuery` 会被宿主直接抛错（`cannot get property "sessionQuery" without inject`），被当成授权失败。现在处理器建立在声明了 `connection` / `sessionQuery` / `sessions` 的子上下文中。
+- 新增回归：模拟宿主拒绝未注入服务的上下文，确认桥接仍能正常授权。
+
 # 0.6.4
 
 - 修复新会话被判为“非 PPT Studio”：空白会话的预设只存在于 `agentPreset` 投影中，授权改为读取该投影，而不是当天尚无记录的事件流。
