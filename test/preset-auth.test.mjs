@@ -53,6 +53,25 @@ test('a persisted-only session folds selection events instead of trusting its cr
   }
 });
 
+test('a blank session authorizes from its projection instead of its empty event log', async () => {
+  let requestedMode;
+  const handler = createHandler({ ctx: { sessionQuery: {
+    async observeSession(_id, options) {
+      requestedMode = options?.projectionMode;
+      return {
+        header: { agentPreset: null },
+        projections: { asOfSeq: 4, values: { agentPreset: 'ppt-studio' } },
+        get events() { throw new Error('the projection already answered'); },
+        [Symbol.dispose]() {},
+      };
+    },
+  } } });
+  const response = await handler(new Request('http://localhost/api/dsh-ppt-studio?action=mode&sessionId=blank-session'));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).mode, 'ppt-studio');
+  assert.equal(requestedMode, 'all');
+});
+
 test('a live session without a materialized preset falls back to the observation', async () => {
   const live = { id: 'session-warm' };
   const handler = createHandler({ ctx: {
