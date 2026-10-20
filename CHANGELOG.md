@@ -1,3 +1,9 @@
+# 0.6.3
+
+- 连接界面显示当前前端构建号，一眼可确认是否加载了新代码。
+- 新增客户端阶段诊断：`client-loaded`、`boot-start`、`boot-ok`、`boot-failed`，写入 `$DSH_HOME/dsh-ppt-studio/diagnostics.ndjson`；只接受同源、4 KB 以内、字段白名单的负载，不能访问项目数据。
+- 服务端预设校验超时也会记录 `auth-timeout` 与对应动作。
+
 # 0.6.2
 
 - 预设校验增加 4 秒上限：宿主会话查询卡住时返回 `AUTH_TIMEOUT`，面板显示原因和「重试连接」，不再无限等待。
