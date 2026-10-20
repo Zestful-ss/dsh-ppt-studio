@@ -1,6 +1,6 @@
 {
   "name": "dsh-ppt-studio",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "PPT Studio for DSH：在侧边栏逐页制作、圈选修改并导出可编辑 PPTX。",
   "type": "module",
   "main": "lib/index.js",
