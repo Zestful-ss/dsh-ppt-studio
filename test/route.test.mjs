@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,7 +10,12 @@ process.env.DSH_HOME = home;
 const { createHandler } = await import('../lib/index.js');
 const { ProjectStore } = await import('../lib/project.js');
 
-const handler = createHandler({ authorizePreset: async sessionId => sessionId === 'ppt-test' });
+const workspaceDir = join(home, 'workspace');
+await mkdir(workspaceDir, { recursive: true });
+const handler = createHandler({
+  authorizePreset: async sessionId => sessionId === 'ppt-test',
+  resolveWorkspace: async () => workspaceDir,
+});
 const call = (method, body, token, url = 'http://127.0.0.1/api/dsh-ppt-studio', sessionId = 'ppt-test') => {
   const target = new URL(url);
   if (method === 'GET') target.searchParams.set('sessionId', sessionId);
@@ -25,7 +30,7 @@ const call = (method, body, token, url = 'http://127.0.0.1/api/dsh-ppt-studio', 
 };
 
 test('route: guarded, creates, saves and exports', async () => {
-  try {
+  {
     const boot = await (await call('GET')).json();
     assert.equal(typeof boot.token, 'string');
     assert.ok(boot.token.length > 10);
@@ -103,6 +108,37 @@ test('route: guarded, creates, saves and exports', async () => {
     assert.match(exported.path, /\.pptx$/);
     assert.ok(exported.bytes > 1000);
 
+    const download = await call('POST', { action: 'download', id, revision: saved.project.revision, filename: exported.filename }, boot.token);
+    assert.equal(download.status, 200);
+    assert.equal(download.headers.get('content-type'), 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    assert.equal(download.headers.get('cache-control'), 'no-store');
+    const disposition = download.headers.get('content-disposition');
+    assert.match(disposition, /^attachment; filename="presentation\.pptx"; filename\*=UTF-8''/);
+    assert.doesNotMatch(disposition, /[\r\n]/);
+    const bytes = Buffer.from(await download.arrayBuffer());
+    assert.deepEqual(bytes, await readFile(exported.path));
+    assert.equal(Number(download.headers.get('content-length')), bytes.length);
+
+    const traversal = await call('POST', { action: 'download', id, revision: saved.project.revision, filename: `../${exported.filename}` }, boot.token);
+    assert.equal(traversal.status, 400);
+    const wrongRevision = await call('POST', { action: 'download', id, revision: saved.project.revision + 1, filename: exported.filename }, boot.token);
+    assert.equal(wrongRevision.status, 400);
+    const missing = await call('POST', { action: 'download', id, revision: saved.project.revision, filename: `missing-r${saved.project.revision}.pptx` }, boot.token);
+    assert.equal(missing.status, 404);
+    const wrongToken = await call('POST', { action: 'download', id, revision: saved.project.revision, filename: exported.filename }, 'wrong');
+    assert.equal(wrongToken.status, 403);
+
+    const copyResponse = await call('POST', { action: 'copyExport', id, revision: saved.project.revision, filename: exported.filename }, boot.token);
+    assert.equal(copyResponse.status, 200);
+    const copied = await copyResponse.json();
+    assert.equal(copied.filename, exported.filename);
+    assert.ok(copied.path.startsWith(workspaceDir));
+    assert.deepEqual(await readFile(copied.path), bytes);
+    assert.equal((await stat(copied.path)).size, bytes.length);
+    const secondCopy = await (await call('POST', { action: 'copyExport', id, revision: saved.project.revision, filename: exported.filename }, boot.token)).json();
+    assert.notEqual(secondCopy.filename, copied.filename, 'a repeated copy never overwrites');
+    assert.deepEqual(await readFile(secondCopy.path), bytes);
+
     const requests = await (await call('POST', {
       action: 'request',
       id,
@@ -115,10 +151,16 @@ test('route: guarded, creates, saves and exports', async () => {
     assert.equal(requests.project.pending.at(-1).instruction, '标题再大一点');
     assert.equal(requests.project.pending.at(-1).baseRevision, saved.project.revision);
 
-    const deleted = await (await call('POST', { action: 'delete', id }, boot.token)).json();
+    const current = await (await call('GET', null, null, `http://127.0.0.1/api/dsh-ppt-studio?action=revision&id=${id}`)).json();
+    const staleDelete = await call('POST', { action: 'delete', id, baseRevision: current.revision - 1 }, boot.token);
+    assert.equal(staleDelete.status, 409, 'a stale revision cannot delete');
+    assert.equal((await staleDelete.json()).currentRevision, current.revision);
+    const deleted = await (await call('POST', { action: 'delete', id, baseRevision: current.revision }, boot.token)).json();
     assert.deepEqual(deleted.projects, []);
     assert.equal((await new ProjectStore(join(home, 'dsh-ppt-studio')).list()).length, 0);
-  } finally {
-    await rm(home, { recursive: true, force: true });
+    const afterDelete = await call('POST', { action: 'download', id, revision: saved.project.revision, filename: exported.filename }, boot.token);
+    assert.equal(afterDelete.status, 404, 'an old artifact is gone with its project');
   }
 });
+
+test.after(() => rm(home, { recursive: true, force: true }));

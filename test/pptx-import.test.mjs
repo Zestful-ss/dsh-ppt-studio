@@ -778,3 +778,163 @@ test('export refuses a changed source package and missing bindings', async () =>
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+function buildRichFixture() {
+  const parts = fixtureParts();
+  parts['ppt/charts/_rels/chart1.xml.rels'] = `${XML_HEAD}<Relationships xmlns="${PKG_REL}"><Relationship Id="rId1" Type="${R}/package" Target="../embeddings/Microsoft_Excel_Worksheet1.xlsx"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style1.xml"/><Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2011/relationships/chartColorStyle" Target="colors1.xml"/></Relationships>`;
+  parts['ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx'] = Buffer.from('WORKBOOK-BYTES', 'utf8');
+  parts['ppt/charts/style1.xml'] = `${XML_HEAD}<cs:chartStyle xmlns:cs="urn:fixture:chart:style"><cs:marker>STYLE-MARKER</cs:marker></cs:chartStyle>`;
+  parts['ppt/charts/colors1.xml'] = `${XML_HEAD}<cs:colorStyle xmlns:cs="urn:fixture:chart:colors"><cs:marker>COLORS-MARKER</cs:marker></cs:colorStyle>`;
+  parts['ppt/notesSlides/_rels/notesSlide1.xml.rels'] = `${XML_HEAD}<Relationships xmlns="${PKG_REL}"><Relationship Id="rId1" Type="${R}/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="${R}/slide" Target="../slides/slide1.xml"/></Relationships>`;
+  parts['[Content_Types].xml'] = parts['[Content_Types].xml'].replace('</Types>', '<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/><Override PartName="/ppt/charts/style1.xml" ContentType="application/vnd.ms-office.chartstyle+xml"/><Override PartName="/ppt/charts/colors1.xml" ContentType="application/vnd.ms-office.chartcolorstyle+xml"/></Types>');
+  const zip = new JSZip();
+  for (const [name, content] of Object.entries(parts)) zip.file(name, content);
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+async function richImport() {
+  const source = await buildRichFixture();
+  const { template, bindings } = await importPptx(source, { filename: 'fixture.pptx' });
+  return { source, template, bindings, project: projectFrom(template) };
+}
+
+const assertInternalTargetsExist = async zip => {
+  for (const name of Object.keys(zip.files)) {
+    if (!/(^|\/)_rels\/[^/]+\.rels$/.test(name)) continue;
+    const base = name.replace(/_rels\/[^/]+\.rels$/, '');
+    const xml = await zip.file(name).async('text');
+    for (const tag of xml.match(/<Relationship\b[^>]*\/>/g) || []) {
+      if (/TargetMode="External"/.test(tag)) continue;
+      const target = tag.match(/Target="([^"]+)"/)?.[1];
+      if (!target) continue;
+      const resolved = target.split('/').reduce((stack, part) => {
+        if (!part || part === '.') return stack;
+        if (part === '..') { stack.pop(); return stack; }
+        stack.push(part);
+        return stack;
+      }, base.split('/').filter(Boolean)).join('/');
+      assert.ok(zip.file(resolved), `${name} target ${target} resolves to a real part`);
+    }
+  }
+};
+
+test('duplicated imported pages own their notes, charts and unknown XML', async () => {
+  const { source, bindings, project: base } = await richImport();
+  const originalZip = await JSZip.loadAsync(source);
+  const sourceHash = createHash('sha256').update(source).digest('hex');
+  const dir = await temp();
+  try {
+    const [slide1, , slide3] = base.slides;
+    let project = base;
+    project = applyOperations(project, [{ type: 'duplicateSlide', slideId: slide1.id }]).project;
+    project = applyOperations(project, [{ type: 'duplicateSlide', slideId: slide1.id }]).project;
+    project = applyOperations(project, [{ type: 'duplicateSlide', slideId: slide3.id }]).project;
+    project = applyOperations(project, [
+      { type: 'updateElement', slideId: slide1.id, elementId: slide1.elements.find(element => element.text === '第一页标题').id, props: { text: 'ORIGINAL-TITLE' } },
+      { type: 'updateSlide', slideId: slide1.id, note: 'ORIGINAL-NOTE' },
+    ]).project;
+    const copy1 = project.slides[1];
+    const copy2 = project.slides[2];
+    const chartCopy = project.slides.find(slide => slide.sourceSlideId === slide3.id);
+    project = applyOperations(project, [
+      { type: 'updateElement', slideId: copy1.id, elementId: copy1.elements.find(element => element.text === '第一页标题').id, props: { text: 'COPY1-TITLE' } },
+      { type: 'updateSlide', slideId: copy1.id, note: 'COPY1-NOTE' },
+      { type: 'updateElement', slideId: copy2.id, elementId: copy2.elements.find(element => element.text === '第一页标题').id, props: { text: 'COPY2-TITLE' } },
+      { type: 'updateSlide', slideId: copy2.id, note: 'COPY2-NOTE' },
+      { type: 'updateElement', slideId: chartCopy.id, elementId: chartCopy.elements.find(element => element.type === 'chart').id, props: { data: { labels: ['七', '八', '九'], series: [{ name: '副本', values: [7, 8, 9] }] } } },
+      { type: 'moveSlide', slideId: copy2.id, to: 0 },
+      { type: 'removeSlide', slideId: slide1.id },
+    ]).project;
+    const out = await exportDeck(project, bindings, dir, source);
+    const exported = await JSZip.loadAsync(out.buffer);
+    await assertInternalTargetsExist(exported);
+    const slideParts = Object.keys(exported.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+    const texts = await Promise.all(slideParts.map(name => exported.file(name).async('text')));
+    assert.ok(texts.some(text => text.includes('COPY1-TITLE')), 'the first copy keeps its own title');
+    assert.ok(texts.some(text => text.includes('COPY2-TITLE')), 'the second copy keeps its own title');
+    assert.ok(!texts.some(text => text.includes('ORIGINAL-TITLE')), 'the deleted original is gone');
+    const markedCopies = texts.filter(text => text.includes('COPY1-TITLE') || text.includes('COPY2-TITLE'));
+    assert.equal(markedCopies.length, 2);
+    assert.ok(markedCopies.every(text => text.includes('UNKNOWN-EXT-MARKER')), 'unknown slide XML survives in every copy');
+    const notesParts = Object.keys(exported.files).filter(name => /^ppt\/notesSlides\/notesSlide(?:Copy)?\d+\.xml$/.test(name));
+    const notes = await Promise.all(notesParts.map(name => exported.file(name).async('text')));
+    assert.ok(notes.some(text => text.includes('COPY1-NOTE')));
+    assert.ok(notes.some(text => text.includes('COPY2-NOTE')));
+    assert.ok(!notes.some(text => text.includes('ORIGINAL-NOTE')), 'the deleted original note is not reused');
+    assert.equal(new Set(slideParts).size, slideParts.length);
+    const chartParts = Object.keys(exported.files).filter(name => /^ppt\/charts\/chart(?:Copy)?\d+\.xml$/.test(name));
+    const charts = await Promise.all(chartParts.map(name => exported.file(name).async('text')));
+    assert.ok(charts.some(text => text.includes('<c:v>7</c:v>')), 'the copy chart has its edited values');
+    assert.ok(charts.some(text => text.includes('<c:v>1</c:v>')), 'the original chart keeps its values');
+    const styleParts = Object.keys(exported.files).filter(name => /^ppt\/charts\/styleCopy\d+\.xml$/.test(name));
+    const colorParts = Object.keys(exported.files).filter(name => /^ppt\/charts\/colorsCopy\d+\.xml$/.test(name));
+    const workbookParts = Object.keys(exported.files).filter(name => /^ppt\/embeddings\/Microsoft_Excel_WorksheetCopy\d+\.xlsx$/.test(name));
+    assert.ok(styleParts.length >= 1, 'chart style has an independent part');
+    assert.ok(colorParts.length >= 1, 'chart colors have an independent part');
+    assert.ok(workbookParts.length >= 1, 'the embedded workbook has an independent part');
+    for (const name of workbookParts) assert.equal(await exported.file(name).async('text'), 'WORKBOOK-BYTES');
+    assert.equal(await exported.file('ppt/charts/style1.xml').async('text'), await originalZip.file('ppt/charts/style1.xml').async('text'));
+    assert.equal(createHash('sha256').update(await readFile(join(dir, 'source.pptx'))).digest('hex'), sourceHash, 'the source package is untouched');
+    for (const shared of ['ppt/slideMasters/slideMaster1.xml', 'ppt/slideLayouts/slideLayout1.xml', 'ppt/theme/theme1.xml', 'ppt/media/preserved.dat']) {
+      assert.ok(exported.file(shared), `${shared} stays in the package`);
+    }
+    const reimported = await importPptx(out.buffer, { filename: 'roundtrip.pptx' });
+    const round = projectFrom(reimported.template);
+    const roundTexts = round.slides.map(slide => slide.elements.map(element => element.text || '').join('|'));
+    assert.ok(roundTexts.some(text => text.includes('COPY1-TITLE')));
+    assert.ok(roundTexts.some(text => text.includes('COPY2-TITLE')));
+    const roundCharts = round.slides.flatMap(slide => slide.elements).filter(element => element.type === 'chart');
+    assert.ok(roundCharts.some(chart => chart.data.series.some(series => series.values.join(',') === '7,8,9')), 'the copied chart data round-trips');
+    assert.ok(roundCharts.some(chart => chart.data.series.some(series => series.values.join(',') === '1,2,3')), 'the original chart data round-trips');
+    const roundNotes = round.slides.map(slide => slide.note);
+    assert.ok(roundNotes.includes('COPY1-NOTE'));
+    assert.ok(roundNotes.includes('COPY2-NOTE'));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('page-count-equal copies are never mapped by import order', async () => {
+  const { bindings, project: base } = await richImport();
+  const dir = await temp();
+  try {
+    let project = base;
+    for (let index = 0; index < 3; index += 1) {
+      project = applyOperations(project, [{ type: 'duplicateSlide', slideId: base.slides[0].id }]).project;
+    }
+    const copies = project.slides.filter(slide => slide.sourceSlideId === base.slides[0].id);
+    assert.equal(copies.length, 3);
+    const edits = copies.map((slide, index) => ({
+      type: 'updateElement',
+      slideId: slide.id,
+      elementId: slide.elements[0].id,
+      props: { text: `COPY-${index + 1}` },
+    }));
+    const removals = project.slides.filter(slide => !slide.sourceSlideId).map(slide => ({ type: 'removeSlide', slideId: slide.id }));
+    project = applyOperations(project, [...edits, ...removals]).project;
+    assert.equal(project.slides.length, 3);
+    const source = await buildRichFixture();
+    const out = await exportDeck(project, bindings, dir, source);
+    const exported = await JSZip.loadAsync(out.buffer);
+    const parts = Object.keys(exported.files).filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+    const texts = await Promise.all(parts.map(name => exported.file(name).async('text')));
+    for (const label of ['COPY-1', 'COPY-2', 'COPY-3']) assert.ok(texts.some(text => text.includes(label)), `${label} keeps its own page`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a copy whose source part is missing reports source_changed', async () => {
+  const { bindings, project: base } = await richImport();
+  const dir = await temp();
+  try {
+    const project = applyOperations(base, [{ type: 'duplicateSlide', slideId: base.slides[0].id }]).project;
+    const damaged = { ...bindings, slides: { ...bindings.slides, [base.slides[0].id]: { ...bindings.slides[base.slides[0].id], part: 'ppt/slides/missing.xml' } } };
+    const source = await buildRichFixture();
+    await assert.rejects(
+      () => exportDeck(project, damaged, dir, source),
+      error => error instanceof ProjectError && error.code === 'source_changed',
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -57,7 +57,7 @@ test('uploaded and new decks share saves, selection requests, guarded exports an
   assert.notEqual(sourceCopy.project.id, body.id);
   assert.equal(sourceCopy.project.revision, 1);
   assert.deepEqual(sourceCopy.project.pending, []);
-  assert.equal((await post({ action: 'delete', id: body.id }, boot.token)).status, 200);
+  assert.equal((await post({ action: 'delete', id: body.id, baseRevision: requested.project.revision }, boot.token)).status, 200);
   const exportedResponse = await post({ action: 'export', id: sourceCopy.project.id, baseRevision: 1 }, boot.token);
   assert.equal(exportedResponse.status, 200);
   const exported = await exportedResponse.json();

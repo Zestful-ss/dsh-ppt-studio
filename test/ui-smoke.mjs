@@ -1,8 +1,9 @@
 import http from 'node:http';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
+import JSZip from 'jszip';
 import PptxGenJS from 'pptxgenjs';
 
 // The plugin resolves its storage root when modules load, so the isolated home must be set first.
@@ -88,7 +89,15 @@ const smokePptxPath = join(tempHome, 'smoke-import.pptx');
  slide.addImage({ data: smokeImageUrl, x: 8.2, y: 2.1, w: 1.2, h: 0.6 });
  slide.addTable([['项目', '数值'], ['A', '1'], ['B', '2']], { x: 5.6, y: 3.2, w: 3.4, h: 1.8, fontSize: 14 });
  slide.addNotes('导入烟测备注');
- await writeFile(smokePptxPath, await pptx.write({ outputType: 'nodebuffer' }));
+ // Keep an unknown package part so an imported copy must survive export with
+ // the original customXml bytes instead of being redrawn.
+ const zip = await JSZip.loadAsync(await pptx.write({ outputType: 'nodebuffer' }));
+ zip.file('customXml/item1.xml', '<customXmlFixture>SMOKE-CUSTOM-XML</customXmlFixture>');
+ const contentTypes = await zip.file('[Content_Types].xml').async('text');
+ zip.file('[Content_Types].xml', contentTypes.replace('</Types>', '<Override PartName="/customXml/item1.xml" ContentType="application/xml"/></Types>'));
+ const presentationRels = await zip.file('ppt/_rels/presentation.xml.rels').async('text');
+ zip.file('ppt/_rels/presentation.xml.rels', presentationRels.replace('</Relationships>', '<Relationship Id="rIdCustomXml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" Target="../customXml/item1.xml"/></Relationships>'));
+ await writeFile(smokePptxPath, await zip.generateAsync({ type: 'nodebuffer' }));
  console.log('PPT_STUDIO_SMOKE_PPTX=' + smokePptxPath);
 }
 
@@ -112,6 +121,14 @@ await mkdir(thirdWorkspace, { recursive: true });
 const thirdDeck = await store.create('第三工作区项目', { workspace: thirdWorkspace });
 const emptyWorkspace = join(tempHome, 'empty-workspace');
 await mkdir(emptyWorkspace, { recursive: true });
+// A deck beyond the discovery depth limit: the empty workbench must still show
+// the incomplete-scan notice (with zero files listed).
+let emptyDeep = emptyWorkspace;
+for (let index = 0; index < 9; index += 1) {
+  emptyDeep = join(emptyDeep, `d${index}`);
+  await mkdir(emptyDeep, { recursive: true });
+}
+await writeFile(join(emptyDeep, 'hidden-deck.pptx'), await readFile(smokePptxPath));
 // A legacy project imported before workspaces existed: real origin metadata, no
 // workspace field. Claiming it is what the "归入当前工作区" action exercises.
 const legacyImport = await store.importPptx(await readFile(smokePptxPath), {
@@ -131,12 +148,24 @@ for (let i = 0; i < 9; i += 1) {
   await mkdir(deepDir, { recursive: true });
 }
 await writeFile(join(deepDir, 'deck.pptx'), await readFile(smokePptxPath));
+// 401 metadata-only decks: discovery must report a complete sweep that keeps
+// only the newest K files, without reading any PPTX content.
+const limitedDir = join(tempHome, '.smoke-fixtures', 'scan-limit');
+await mkdir(limitedDir, { recursive: true });
+await Promise.all(Array.from({ length: 401 }, (_, index) => writeFile(join(limitedDir, `deck-${String(index + 1).padStart(3, '0')}.pptx`), '')));
 console.log('PPT_STUDIO_SMOKE_OTHER_PROJECT=' + otherDeck.id);
 console.log('PPT_STUDIO_SMOKE_THIRD_PROJECT=' + thirdDeck.id);
 console.log('PPT_STUDIO_SMOKE_LEGACY_PROJECT=' + legacyImport.project.id);
 console.log('PPT_STUDIO_SMOKE_PROJECT=' + store.path(initialDeck.id));
 console.log('PPT_STUDIO_SMOKE_PROJECT_ID=' + initialDeck.id);
 
+// Reset must restore the exact private JSON (revision, workspace, origin,
+// pending and commit log), so keep a private snapshot of the seeded files.
+const seedProjects = new Map();
+for (const id of [initialDeck.id, otherDeck.id, thirdDeck.id, legacyImport.project.id]) {
+  seedProjects.set(id, JSON.parse(await readFile(store.path(id), 'utf8')));
+}
+const smokeSourceMtime = (await stat(smokePptxPath)).mtime;
 const workspaceBySession = {
   'ppt-smoke': tempHome,
   'ppt-studio': tempHome,
@@ -152,8 +181,24 @@ const projectHandler = createHandler({
 
 
 const saveOps = [];
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+// Production writes run as promises the harness can await before resetting, so
+// a tab unloaded mid-save cannot still be writing while the seed is restored.
+const activeMutations = new Set();
+const FAIL_STATUSES = new Set([400, 403, 404, 409, 500, 503]);
+let failNext = null;
 let loseNextSave = false;
 let delayNextSave = 0;
+let loseDeleteUntil = 0;
 const skillsHandler = createSkillsHandler({
   getRuntime: () => getSkillRuntime(tempHome),
 });
@@ -168,30 +213,27 @@ const server = http.createServer(async (req, res) => {
       sessions: { a: 'ppt-studio', b: 'ppt-other', c: 'ppt-third', empty: 'ppt-empty' },
       workspaces: { a: tempHome, b: otherWorkspace, c: thirdWorkspace, empty: emptyWorkspace },
       projects: { a: initialDeck.id, b: otherDeck.id, c: thirdDeck.id, legacy: legacyImport.project.id },
-      paths: { source: smokePptxPath, incompleteDir, completeDir },
+      paths: { source: smokePptxPath, incompleteDir, completeDir, limitedDir },
     }));
     return;
   }
-  // Restores the seeded state so a repeated regression run sees the same world:
-  // a legacy deck without a workspace and every test session authorized.
+  // Restores the seeded private JSON so a repeated run sees the same world:
+  // revisions, workspaces, origins, pending requests and commit logs included.
   if (url.pathname === '/smoke/reset' && req.method === 'POST') {
-    const restore = async (id, workspace, title) => {
-      const target = store.path(id);
-      const project = JSON.parse(await readFile(target, 'utf8'));
-      if (workspace) project.workspace = workspace;
-      else delete project.workspace;
-      if (title) project.title = title;
-      await writeFile(target, `${JSON.stringify(project, null, 2)}\n`);
-    };
     try {
-      const seeds = new Set([initialDeck.id, otherDeck.id, thirdDeck.id, legacyImport.project.id]);
+      await Promise.allSettled([...activeMutations]);
+      const kept = new Set(seedProjects.keys());
       for (const project of await store.list()) {
-        if (!seeds.has(project.id)) await store.remove(project.id);
+        if (kept.has(project.id)) continue;
+        await store.remove(project.id, project.revision);
       }
-      await restore(initialDeck.id, tempHome, '季度汇报');
-      await restore(otherDeck.id, otherWorkspace, '其他工作区项目');
-      await restore(thirdDeck.id, thirdWorkspace, '第三工作区项目');
-      await restore(legacyImport.project.id, null, '旧版未归属文稿');
+      for (const seed of seedProjects.values()) await store.write(structuredClone(seed));
+      await utimes(smokePptxPath, smokeSourceMtime, smokeSourceMtime);
+      saveOps.length = 0;
+      loseNextSave = false;
+      delayNextSave = 0;
+      loseDeleteUntil = 0;
+      failNext = null;
       for (const session of Object.keys(workspaceBySession)) allowedSessions.add(session);
       Object.assign(workspaceBySession, {
         'ppt-smoke': tempHome,
@@ -205,6 +247,42 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: String(error && error.message) }));
       return;
     }
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  // Fixture-only failure injection: the next matching production request is
+  // answered with this error instead of reaching the real handler.
+  if (url.pathname === '/smoke/fail-next' && req.method === 'POST') {
+    const payload = await readJsonBody(req);
+    const session = typeof payload.sessionId === 'string' && workspaceBySession[payload.sessionId] ? payload.sessionId : '';
+    const method = payload.method === 'GET' || payload.method === 'POST' ? payload.method : '';
+    const status = Number(payload.status);
+    if (!session || !method || typeof payload.action !== 'string' || !payload.action
+      || !FAIL_STATUSES.has(status) || typeof payload.code !== 'string' || !payload.code) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid failure fixture' }));
+      return;
+    }
+    failNext = {
+      method, action: payload.action, sessionId: session, status,
+      code: payload.code, error: typeof payload.error === 'string' && payload.error ? payload.error : payload.code,
+    };
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  // The browser and the host need not share a filesystem: let a scenario move
+  // the real fixture source's mtime through the host instead of faking metadata.
+  if (url.pathname === '/smoke/source-mtime' && req.method === 'POST') {
+    const payload = await readJsonBody(req);
+    const when = typeof payload.modifiedAt === 'string' ? Date.parse(payload.modifiedAt) : NaN;
+    if (!Number.isFinite(when)) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid modifiedAt' }));
+      return;
+    }
+    await utimes(smokePptxPath, new Date(when), new Date(when));
     res.writeHead(204);
     res.end();
     return;
@@ -258,6 +336,12 @@ const server = http.createServer(async (req, res) => {
     res.end();
     return;
   }
+  if (url.pathname === '/smoke/lose-next-delete') {
+    loseDeleteUntil = Date.now() + 3000;
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   if (url.pathname === '/smoke/delay-next-save') {
     delayNextSave = 9000;
     res.writeHead(204);
@@ -286,22 +370,33 @@ const server = http.createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks);
-    let isSave = false;
-    try {
-      const payload = JSON.parse(body.toString('utf8'));
-      if (payload && payload.action === 'save') {
-        isSave = true;
-        saveOps.push({
-          operationId: payload.operationId,
-          baseRevision: payload.baseRevision,
-          title: payload.project && payload.project.title,
-          sessionId: payload.sessionId,
-          projectId: payload.project && payload.project.id,
-          workspace: payload.project && payload.project.workspace,
-          at: Date.now(),
-        });
-      }
-    } catch {}
+    let payload = null;
+    try { payload = body.length ? JSON.parse(body.toString('utf8')) : null; } catch {}
+    const action = (payload && typeof payload.action === 'string' ? payload.action : '')
+      || url.searchParams.get('action')
+      || (url.pathname.endsWith('/dsh-ppt-studio') ? 'boot' : '');
+    const sessionId = (payload && typeof payload.sessionId === 'string' ? payload.sessionId : '')
+      || url.searchParams.get('sessionId')
+      || '';
+    if (failNext && failNext.method === req.method && failNext.action === action && failNext.sessionId === sessionId) {
+      const failure = failNext;
+      failNext = null;
+      res.writeHead(failure.status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ error: failure.error, code: failure.code }));
+      return;
+    }
+    const isSave = Boolean(payload && payload.action === 'save');
+    if (isSave) {
+      saveOps.push({
+        operationId: payload.operationId,
+        baseRevision: payload.baseRevision,
+        title: payload.project && payload.project.title,
+        sessionId: payload.sessionId,
+        projectId: payload.project && payload.project.id,
+        workspace: payload.project && payload.project.workspace,
+        slides: payload.project && Array.isArray(payload.project.slides) ? payload.project.slides.map(slide => ({ id: slide.id, source: slide.sourceSlideId || null })) : null,
+      });
+    }
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) headers[k] = v;
     const fetchReq = new Request(url.href, {
@@ -309,9 +404,23 @@ const server = http.createServer(async (req, res) => {
       headers,
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
     });
-    const fetchRes = await projectHandler(fetchReq);
+    const handling = projectHandler(fetchReq);
+    if (req.method !== 'GET') activeMutations.add(handling);
+    let fetchRes;
+    try {
+      fetchRes = await handling;
+    } finally {
+      activeMutations.delete(handling);
+    }
     if (isSave && loseNextSave) {
       loseNextSave = false;
+      res.destroy();
+      return;
+    }
+    // A browser may retry a POST whose reused socket closed before the
+    // response arrived; drop every delete answer in the window so the client
+    // really observes an unknown result and has to verify it.
+    if (payload && payload.action === 'delete' && Date.now() < loseDeleteUntil) {
       res.destroy();
       return;
     }
@@ -324,7 +433,6 @@ const server = http.createServer(async (req, res) => {
     res.end(Buffer.from(await fetchRes.arrayBuffer()));
     return;
   }
-
   if (url.pathname === '/react.js') {
     const reactCode = await readFile(new URL('../node_modules/react/umd/react.development.js', import.meta.url), 'utf8');
     res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8' });
@@ -341,7 +449,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/client.js') {
     const clientCode = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
-    res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8' });
+    res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-store' });
     res.end(clientCode);
     return;
   }
@@ -385,6 +493,7 @@ const server = http.createServer(async (req, res) => {
       const held = new Map();
       const requests = [];
       let counter = 0;
+      let requestSeq = 0;
       const waitForGate = gate => new Promise(resolve => {
         gate.pending.push(resolve);
         if (gate.released) { gate.pending.length = 0; resolve(); }
@@ -393,7 +502,7 @@ const server = http.createServer(async (req, res) => {
         requests,
         holdNext(spec) {
           const id = 'gate_' + (++counter);
-          held.set(id, { id, pending: [], released: false, entered: false, spec });
+          held.set(id, { id, pending: [], released: false, entered: false, claimed: false, spec });
           return id;
         },
         release(id) {
@@ -402,6 +511,13 @@ const server = http.createServer(async (req, res) => {
           gate.released = true;
           gate.pending.forEach(fn => fn());
           gate.pending.length = 0;
+        },
+        releaseAll() {
+          for (const gate of held.values()) {
+            gate.released = true;
+            gate.pending.forEach(fn => fn());
+            gate.pending.length = 0;
+          }
         },
         status(id) {
           const gate = held.get(id);
@@ -412,29 +528,50 @@ const server = http.createServer(async (req, res) => {
       // POSTs carry action and sessionId in the JSON body, GETs in the query.
       const describe = (url, init, method) => {
         const target = new URL(url, location.href);
+        const isApi = target.pathname.endsWith('/dsh-ppt-studio');
         let body = null;
-        if (init && typeof init.body === 'string') {
+        if (isApi && init && typeof init.body === 'string') {
           try { body = JSON.parse(init.body); } catch {}
         }
-        const action = (body && body.action) || target.searchParams.get('action') || (target.pathname.endsWith('/dsh-ppt-studio') ? 'boot' : target.pathname);
+        const action = (body && body.action) || target.searchParams.get('action') || (isApi ? 'boot' : target.pathname);
         const session = (body && body.sessionId) || target.searchParams.get('sessionId') || '';
-        return { action, sessionId: session, method, url: target.href };
+        const headers = (init && init.headers) || {};
+        const token = headers['x-ppt-studio-token'] || '';
+        return { action, sessionId: session, method, token, url: target.href };
       };
       const original = window.fetch.bind(window);
       window.fetch = async (input, init) => {
         const url = typeof input === 'string' ? input : input.url;
         const method = String((init && init.method) || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
         const described = describe(url, init, method);
-        const gate = [...held.values()].find(item => !item.released
+        // The request is logged before any gate awaits, so a negative assertion
+        // ("the target never booted") sees requests that are still in flight.
+        const entry = { id: (++requestSeq), ...described, startedAt: Date.now(), status: null, completed: false };
+        requests.push(entry);
+        if (requests.length > 400) requests.shift();
+        // One gate holds one request: without the claim two identical requests
+        // would both block on the first gate and never reach the handler.
+        const gate = [...held.values()].find(item => !item.released && !item.claimed
           && item.spec.method === method
           && (!item.spec.action || item.spec.action === described.action)
           && (!item.spec.sessionId || item.spec.sessionId === described.sessionId));
-        if (gate && gate.spec.phase !== 'response') { gate.entered = true; await waitForGate(gate); }
-        const response = await original(input, init);
-        if (gate && gate.spec.phase === 'response') { gate.entered = true; await waitForGate(gate); }
-        requests.push({ ...described, status: response.status, at: Date.now() });
-        if (requests.length > 400) requests.shift();
-        return response;
+        try {
+          if (gate) {
+            gate.claimed = true;
+            if (gate.spec.phase !== 'response') { gate.entered = true; await waitForGate(gate); }
+          }
+          const response = await original(input, init);
+          entry.status = response.status;
+          entry.completed = true;
+          entry.completedAt = Date.now();
+          if (gate && gate.spec.phase === 'response') { gate.entered = true; await waitForGate(gate); }
+          return response;
+        } catch (error) {
+          entry.error = String((error && error.message) || error);
+          entry.completed = true;
+          entry.completedAt = Date.now();
+          throw error;
+        }
       };
     })();
     const view = ${JSON.stringify(view)};
@@ -479,12 +616,14 @@ const server = http.createServer(async (req, res) => {
           conversation: {
             send: async text => {
               window.lastDispatchedMessage = text;
+              window.lastDispatchedSession = sid;
               console.log('CONVERSATION_SEND:', text);
             },
             input: {
               for: () => ({
                 setDraft: text => {
                   window.lastDraftMessage = text;
+                  window.lastDraftSession = sid;
                   console.log('SET_DRAFT:', text);
                 }
               })

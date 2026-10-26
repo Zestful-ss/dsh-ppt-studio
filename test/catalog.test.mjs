@@ -58,7 +58,7 @@ test('the sidebar workbench is hidden outside PPT preset sessions',async()=>{
   'standard-session':{status:403,ok:false,json:async()=>({code:'PRESET_REQUIRED'})},
   'ppt-session':{status:200,ok:true,json:async()=>({mode:'ppt-studio'})},
  };
- runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,fetch:async value=>replies[new URL(value).searchParams.get('sessionId')],window:{location:{href:'http://localhost/'},localStorage:{getItem:()=>null,setItem:()=>{}}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
+ runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,AbortController,setTimeout,clearTimeout,fetch:async value=>replies[new URL(value).searchParams.get('sessionId')],window:{location:{href:'http://localhost/'},localStorage:{getItem:()=>null,setItem:()=>{}}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
  const descriptors=[];
  const ctx={slots:{inject:(_name,cb)=>{cb();return()=>{};},register:()=>()=>{}},effect:fn=>fn(),get:()=>undefined,inject:(_names,cb)=>cb({effect:fn=>fn(),betterSidebar:{registerTab:d=>{descriptors.push(d);return()=>{};}}})};
  plugin.apply(ctx);
@@ -74,7 +74,7 @@ test('the client half no longer exports the old Planners settings page',async()=
  let plugin=null;
  const {runInNewContext}=await import('node:vm');
  const React={createElement:()=>null,useState:initial=>[initial,()=>{}],useRef:current=>({current}),useEffect:()=>{},useMemo:fn=>fn(),useCallback:fn=>fn};
- runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,window:{location:{href:'http://localhost/'}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
+ runInNewContext(await readFile(new URL('../lib/client.js',import.meta.url),'utf8'),{URL,AbortController,setTimeout,clearTimeout,window:{location:{href:'http://localhost/'}},__ModuleLoader__:{load:({factory})=>{plugin=factory(()=>React);}}});
  assert.equal(plugin.Page,undefined);
  assert.deepEqual(Object.keys(plugin).sort(),['apply','inject']);
 });

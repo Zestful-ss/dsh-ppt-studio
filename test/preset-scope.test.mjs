@@ -182,3 +182,137 @@ test('a model imports a local PPTX into the same editable project library', asyn
   assert.equal(project.slides[0].elements.find(element => element.type === 'text').text, 'Imported through the native model tool');
   assert.deepEqual(await readFile(path), source);
 });
+
+test('the model lists only the session workspace by default and can widen it explicitly', async t => {
+  const { ctx, home, key } = await mountPreset(t);
+  const { ProjectStore } = await import('../lib/project.js');
+  const store = new ProjectStore(join(home, 'dsh-ppt-studio'));
+  const workspaceA = join(home, 'workspace-a');
+  const workspaceB = join(home, 'workspace-b');
+  await mkdir(workspaceA, { recursive: true });
+  await mkdir(workspaceB, { recursive: true });
+  const inA = await store.create('A 文稿', { workspace: workspaceA });
+  const inB = await store.create('B 文稿', { workspace: workspaceB });
+  const unowned = await store.create('未归属文稿');
+  const agent = key;
+  agent.session = { header: { cwd: workspaceA } };
+  const invoke = async args => {
+    const result = await ctx.tools.execute({ name: 'ppt_project', arguments: args, agent, signal: new AbortController().signal, callId: `scope-${Math.random().toString(36).slice(2, 8)}` });
+    assert.equal(result.isError, false, JSON.stringify(result));
+    return result;
+  };
+  const scoped = await invoke({ action: 'list' });
+  assert.deepEqual(scoped.value.projects.map(project => project.id), [inA.id], 'default list is the session workspace only');
+  assert.equal(scoped.value.workspace, workspaceA);
+  assert.equal(scoped.value.scope, 'workspace');
+  const text = scoped.content.map(block => block.text ?? '').join('\n');
+  assert.match(text, /\[当前工作区\]/);
+  assert.match(text, new RegExp(inA.id));
+  assert.match(text, new RegExp(`r${inA.revision}`));
+
+  const all = await invoke({ action: 'list', scope: 'all' });
+  assert.deepEqual(all.value.projects.map(project => project.id).sort(), [inA.id, inB.id, unowned.id].sort());
+  const allText = all.content.map(block => block.text ?? '').join('\n');
+  assert.match(allText, /\[其他工作区：/);
+  assert.match(allText, /\[未归属\]/);
+
+  // Without a session cwd the default scope must not silently widen.
+  const savedSession = key.session;
+  delete key.session;
+  const anonymous = await ctx.tools.execute({ name: 'ppt_project', arguments: { action: 'list' }, agent: key, signal: new AbortController().signal, callId: 'scope-anonymous' });
+  const anonymousAll = await ctx.tools.execute({ name: 'ppt_project', arguments: { action: 'list', scope: 'all' }, agent: key, signal: new AbortController().signal, callId: 'scope-anonymous-all' });
+  key.session = savedSession;
+  assert.equal(anonymous.isError, false, JSON.stringify(anonymous));
+  assert.deepEqual(anonymous.value.projects, []);
+  assert.match(anonymous.content.map(block => block.text ?? '').join('\n'), /未识别当前会话工作区/);
+  assert.equal(anonymousAll.value.projects.length, 3);
+
+  const crossWorkspace = await invoke({ action: 'read', id: inB.id });
+  assert.equal(crossWorkspace.value.id, inB.id);
+
+  const { sameWorkspace } = await import('../lib/project.js');
+  assert.equal(sameWorkspace('C:\\Work\\Deck', 'c:/work/deck/'), true);
+  assert.equal(sameWorkspace('C:/', 'C:'), false, 'a drive root is not a drive-relative path');
+  assert.equal(sameWorkspace('C:/', 'c:'), false, 'case folding must not turn a root into drive-relative');
+  assert.equal(sameWorkspace('C:/', 'c:/'), true);
+  assert.equal(sameWorkspace('C:\\', 'c:/'), true, 'a backslash drive root is the same root');
+  assert.equal(sameWorkspace('\\\\server\\Share\\A', '//SERVER/share/a/'), true);
+  assert.equal(sameWorkspace('/home/Deck', '/home/deck'), false);
+  assert.equal(sameWorkspace('/home/Deck/', '/home/Deck'), true);
+  assert.equal(sameWorkspace('', '/home/deck'), false);
+});
+
+test('setTitle renames through the tool and rejects empty or stale edits', async t => {
+  const { ctx, key } = await mountPreset(t);
+  const signal = new AbortController().signal;
+  const assembly = await ctx.systemPrompt.assemble({ scope: key });
+  const schema = assembly.tools.find(tool => tool.name === 'ppt_project').parameters;
+  const invoke = async args => {
+    assert.deepEqual(validateJsonSchemaValue(schema, args), [], 'the schema accepts the action');
+    return ctx.tools.execute({ name: 'ppt_project', arguments: args, agent: key, callId: `retitle-${Math.random().toString(36).slice(2, 8)}`, signal });
+  };
+  const created = await invoke({ action: 'create', title: '原标题' });
+  assert.equal(created.isError, false, JSON.stringify(created));
+  const project = created.value.project;
+  const coverText = project.slides[0].elements[0].text;
+  const update = {
+    action: 'update',
+    id: project.id,
+    baseRevision: project.revision,
+    operationId: 'retitle-once',
+    operations: [{ type: 'setTitle', title: '下一版汇报' }],
+  };
+  const retitled = await invoke(update);
+  assert.equal(retitled.isError, false, JSON.stringify(retitled));
+  assert.equal(retitled.value.title, '下一版汇报');
+  assert.equal(retitled.value.project.slides[0].elements[0].text, coverText, 'the cover body is unchanged');
+  const replayed = await invoke(update);
+  assert.equal(replayed.value.replayed, true);
+  assert.equal(replayed.value.revision, retitled.value.revision, 'the same operationId applies once');
+  const listed = await invoke({ action: 'list', scope: 'all' });
+  assert.equal(listed.value.projects.find(item => item.id === project.id).title, '下一版汇报');
+  const exported = await invoke({ action: 'export', id: project.id, baseRevision: retitled.value.revision });
+  assert.equal(exported.isError, false, JSON.stringify(exported));
+  assert.match(exported.value.filename, /下一版汇报-r\d+\.pptx$/);
+  const blank = await invoke({ ...update, operationId: 'retitle-blank', baseRevision: retitled.value.revision, operations: [{ type: 'setTitle', title: '   ' }] });
+  assert.equal(blank.isError, true);
+  const tooLong = await invoke({ ...update, operationId: 'retitle-long', baseRevision: retitled.value.revision, operations: [{ type: 'setTitle', title: 'x'.repeat(201) }] });
+  assert.equal(tooLong.isError, true);
+  const stale = await invoke({ ...update, operationId: 'retitle-stale' });
+  assert.equal(stale.isError, true, 'an old baseRevision cannot retitle');
+});
+
+test('an agent export can also copy into the session workspace', async t => {
+  const { ctx, home, key } = await mountPreset(t);
+  const workspace = join(home, 'agent-workspace');
+  await mkdir(workspace, { recursive: true });
+  key.session = { header: { cwd: workspace } };
+  const signal = new AbortController().signal;
+  const assembly = await ctx.systemPrompt.assemble({ scope: key });
+  const schema = assembly.tools.find(tool => tool.name === 'ppt_project').parameters;
+  const invoke = async args => {
+    assert.deepEqual(validateJsonSchemaValue(schema, args), [], 'the schema accepts the action');
+    return ctx.tools.execute({ name: 'ppt_project', arguments: args, agent: key, callId: `export-${Math.random().toString(36).slice(2, 8)}`, signal });
+  };
+  const { ProjectStore } = await import('../lib/project.js');
+  const store = new ProjectStore(join(home, 'dsh-ppt-studio'));
+  // The project belongs to another workspace; the copy still goes to the
+  // session workspace resolved from the agent header.
+  const foreign = await store.create('其他工作区项目', { workspace: '/somewhere/else' });
+  const privateExport = await invoke({ action: 'export', id: foreign.id, baseRevision: foreign.revision });
+  assert.equal(privateExport.isError, false, JSON.stringify(privateExport));
+  assert.equal(privateExport.value.workspacePath, undefined, 'private is the default');
+  const publicExport = await invoke({ action: 'export', id: foreign.id, baseRevision: foreign.revision, destination: 'workspace' });
+  assert.equal(publicExport.isError, false, JSON.stringify(publicExport));
+  assert.equal(publicExport.value.workspacePath.startsWith(workspace), true, JSON.stringify(publicExport.value));
+  assert.deepEqual(await readFile(publicExport.value.workspacePath), await readFile(publicExport.value.path));
+  const second = await invoke({ action: 'export', id: foreign.id, baseRevision: foreign.revision, destination: 'workspace' });
+  assert.notEqual(second.value.workspacePath, publicExport.value.workspacePath, 'a repeated copy never overwrites');
+  assert.deepEqual(await readFile(second.value.workspacePath), await readFile(second.value.path));
+  const text = publicExport.content.map(block => block.text ?? '').join('\n');
+  assert.match(text, /已导出：/);
+  assert.match(text, /工作区副本：/);
+  delete key.session;
+  const noWorkspace = await invoke({ action: 'export', id: foreign.id, baseRevision: foreign.revision, destination: 'workspace' });
+  assert.equal(noWorkspace.isError, true, 'without a session workspace the copy is refused');
+});
