@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -105,15 +105,52 @@ initialDeck.slides[0].elements = [
 ];
 await store.save(initialDeck, initialDeck.revision, 'op_seed');
 const otherWorkspace = join(tempHome, 'elsewhere');
+await mkdir(otherWorkspace, { recursive: true });
 const otherDeck = await store.create('其他工作区项目', { workspace: otherWorkspace });
+const thirdWorkspace = join(tempHome, 'third-workspace');
+await mkdir(thirdWorkspace, { recursive: true });
+const thirdDeck = await store.create('第三工作区项目', { workspace: thirdWorkspace });
+const emptyWorkspace = join(tempHome, 'empty-workspace');
+await mkdir(emptyWorkspace, { recursive: true });
+// A legacy project imported before workspaces existed: real origin metadata, no
+// workspace field. Claiming it is what the "归入当前工作区" action exercises.
+const legacyImport = await store.importPptx(await readFile(smokePptxPath), {
+  title: '旧版未归属文稿',
+  filename: 'smoke-import.pptx',
+  source: { path: smokePptxPath, size: (await stat(smokePptxPath)).size, modifiedAt: (await stat(smokePptxPath)).mtime.toISOString() },
+});
+// Two scan fixtures: one where the depth/entry budget runs out, one small and
+// complete. Both hold the same real PPTX so an import from either is valid.
+const incompleteDir = join(tempHome, 'scan-incomplete');
+const completeDir = join(tempHome, 'scan-complete');
+await mkdir(completeDir, { recursive: true });
+await writeFile(join(completeDir, 'deck.pptx'), await readFile(smokePptxPath));
+let deepDir = incompleteDir;
+for (let i = 0; i < 9; i += 1) {
+  deepDir = join(deepDir, `d${i}`);
+  await mkdir(deepDir, { recursive: true });
+}
+await writeFile(join(deepDir, 'deck.pptx'), await readFile(smokePptxPath));
 console.log('PPT_STUDIO_SMOKE_OTHER_PROJECT=' + otherDeck.id);
+console.log('PPT_STUDIO_SMOKE_THIRD_PROJECT=' + thirdDeck.id);
+console.log('PPT_STUDIO_SMOKE_LEGACY_PROJECT=' + legacyImport.project.id);
 console.log('PPT_STUDIO_SMOKE_PROJECT=' + store.path(initialDeck.id));
 console.log('PPT_STUDIO_SMOKE_PROJECT_ID=' + initialDeck.id);
 
+const workspaceBySession = {
+  'ppt-smoke': tempHome,
+  'ppt-studio': tempHome,
+  'ppt-other': otherWorkspace,
+  'ppt-third': thirdWorkspace,
+  'ppt-empty': emptyWorkspace,
+};
+const allowedSessions = new Set(Object.keys(workspaceBySession));
 const projectHandler = createHandler({
-  authorizePreset: async sessionId => sessionId === 'ppt-smoke' || sessionId === 'ppt-studio' || sessionId === 'ppt-other',
-  resolveWorkspace: async sessionId => sessionId === 'ppt-other' ? otherWorkspace : tempHome,
+  authorizePreset: async sessionId => allowedSessions.has(sessionId),
+  resolveWorkspace: async sessionId => workspaceBySession[sessionId],
 });
+
+
 const saveOps = [];
 let loseNextSave = false;
 let delayNextSave = 0;
@@ -124,9 +161,95 @@ const skillsHandler = createSkillsHandler({
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
+  // Fixtures are the only way a test learns ids and paths; they are read-only.
+  if (url.pathname === '/smoke/fixtures') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      sessions: { a: 'ppt-studio', b: 'ppt-other', c: 'ppt-third', empty: 'ppt-empty' },
+      workspaces: { a: tempHome, b: otherWorkspace, c: thirdWorkspace, empty: emptyWorkspace },
+      projects: { a: initialDeck.id, b: otherDeck.id, c: thirdDeck.id, legacy: legacyImport.project.id },
+      paths: { source: smokePptxPath, incompleteDir, completeDir },
+    }));
+    return;
+  }
+  // Restores the seeded state so a repeated regression run sees the same world:
+  // a legacy deck without a workspace and every test session authorized.
+  if (url.pathname === '/smoke/reset' && req.method === 'POST') {
+    const restore = async (id, workspace, title) => {
+      const target = store.path(id);
+      const project = JSON.parse(await readFile(target, 'utf8'));
+      if (workspace) project.workspace = workspace;
+      else delete project.workspace;
+      if (title) project.title = title;
+      await writeFile(target, `${JSON.stringify(project, null, 2)}\n`);
+    };
+    try {
+      const seeds = new Set([initialDeck.id, otherDeck.id, thirdDeck.id, legacyImport.project.id]);
+      for (const project of await store.list()) {
+        if (!seeds.has(project.id)) await store.remove(project.id);
+      }
+      await restore(initialDeck.id, tempHome, '季度汇报');
+      await restore(otherDeck.id, otherWorkspace, '其他工作区项目');
+      await restore(thirdDeck.id, thirdWorkspace, '第三工作区项目');
+      await restore(legacyImport.project.id, null, '旧版未归属文稿');
+      for (const session of Object.keys(workspaceBySession)) allowedSessions.add(session);
+      Object.assign(workspaceBySession, {
+        'ppt-smoke': tempHome,
+        'ppt-studio': tempHome,
+        'ppt-other': otherWorkspace,
+        'ppt-third': thirdWorkspace,
+        'ppt-empty': emptyWorkspace,
+      });
+    } catch (error) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: String(error && error.message) }));
+      return;
+    }
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   if (url.pathname === '/smoke/saves') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(saveOps));
+    return;
+  }
+  if (url.pathname === '/smoke/preset' && req.method === 'POST') {
+    let payload = {};
+    try {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    } catch {}
+    const session = typeof payload.sessionId === 'string' && workspaceBySession[payload.sessionId] ? payload.sessionId : '';
+    if (!session || typeof payload.enabled !== 'boolean') {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unknown session' }));
+      return;
+    }
+    if (payload.enabled) allowedSessions.add(session);
+    else allowedSessions.delete(session);
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (url.pathname === '/smoke/workspace' && req.method === 'POST') {
+    let payload = {};
+    try {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    } catch {}
+    const target = workspaceBySession[payload.sessionId];
+    const next = { a: tempHome, b: otherWorkspace, c: thirdWorkspace, empty: emptyWorkspace }[payload.workspace];
+    if (!target || !next) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unknown session or workspace' }));
+      return;
+    }
+    workspaceBySession[payload.sessionId] = next;
+    res.writeHead(204);
+    res.end();
     return;
   }
   if (url.pathname === '/smoke/lose-next-save') {
@@ -168,7 +291,15 @@ const server = http.createServer(async (req, res) => {
       const payload = JSON.parse(body.toString('utf8'));
       if (payload && payload.action === 'save') {
         isSave = true;
-        saveOps.push({ operationId: payload.operationId, baseRevision: payload.baseRevision, title: payload.project && payload.project.title, at: Date.now() });
+        saveOps.push({
+          operationId: payload.operationId,
+          baseRevision: payload.baseRevision,
+          title: payload.project && payload.project.title,
+          sessionId: payload.sessionId,
+          projectId: payload.project && payload.project.id,
+          workspace: payload.project && payload.project.workspace,
+          at: Date.now(),
+        });
       }
     } catch {}
     const headers = {};
@@ -248,12 +379,71 @@ const server = http.createServer(async (req, res) => {
     window.lastDispatchedMessage = null;
     window.lastDraftMessage = null;
 
+    // Fetch gates live in the host shell so they are installed before the
+    // client bundle loads; a driver cannot rely on init scripts here.
+    (() => {
+      const held = new Map();
+      const requests = [];
+      let counter = 0;
+      const waitForGate = gate => new Promise(resolve => {
+        gate.pending.push(resolve);
+        if (gate.released) { gate.pending.length = 0; resolve(); }
+      });
+      window.smokeNetwork = {
+        requests,
+        holdNext(spec) {
+          const id = 'gate_' + (++counter);
+          held.set(id, { id, pending: [], released: false, entered: false, spec });
+          return id;
+        },
+        release(id) {
+          const gate = held.get(id);
+          if (!gate) throw new Error('unknown gate ' + id);
+          gate.released = true;
+          gate.pending.forEach(fn => fn());
+          gate.pending.length = 0;
+        },
+        status(id) {
+          const gate = held.get(id);
+          if (!gate) throw new Error('unknown gate ' + id);
+          return { entered: gate.entered, released: gate.released };
+        },
+      };
+      // POSTs carry action and sessionId in the JSON body, GETs in the query.
+      const describe = (url, init, method) => {
+        const target = new URL(url, location.href);
+        let body = null;
+        if (init && typeof init.body === 'string') {
+          try { body = JSON.parse(init.body); } catch {}
+        }
+        const action = (body && body.action) || target.searchParams.get('action') || (target.pathname.endsWith('/dsh-ppt-studio') ? 'boot' : target.pathname);
+        const session = (body && body.sessionId) || target.searchParams.get('sessionId') || '';
+        return { action, sessionId: session, method, url: target.href };
+      };
+      const original = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        const method = String((init && init.method) || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+        const described = describe(url, init, method);
+        const gate = [...held.values()].find(item => !item.released
+          && item.spec.method === method
+          && (!item.spec.action || item.spec.action === described.action)
+          && (!item.spec.sessionId || item.spec.sessionId === described.sessionId));
+        if (gate && gate.spec.phase !== 'response') { gate.entered = true; await waitForGate(gate); }
+        const response = await original(input, init);
+        if (gate && gate.spec.phase === 'response') { gate.entered = true; await waitForGate(gate); }
+        requests.push({ ...described, status: response.status, at: Date.now() });
+        if (requests.length > 400) requests.shift();
+        return response;
+      };
+    })();
     const view = ${JSON.stringify(view)};
     const sessionId = ${JSON.stringify(session)};
     document.getElementById('session-info').textContent = 'Session: ' + sessionId;
 
     const fakeScope = { sessionId };
     let workbenchRoot = null;
+    let smokeVisible = true;
     const renderWorkbench = tabDesc => {
       if (view !== 'workbench') return;
       const host = document.getElementById('app');
@@ -265,7 +455,14 @@ const server = http.createServer(async (req, res) => {
           '会话 ' + sessionId + ' 不是 PPT Studio 预设，工作台已拒绝加载（PRESET_REQUIRED）。'));
         return;
       }
-      workbenchRoot.render(React.createElement(tabDesc.component, { ctx: fakeCtx, scope: fakeScope, visible: true }));
+      workbenchRoot.render(React.createElement(tabDesc.component, { ctx: fakeCtx, scope: fakeScope, visible: smokeVisible }));
+    };
+    // The real host hides and re-shows the tab; the visibility-driven load only
+    // runs through the same root and component instance.
+    window.setSmokeVisible = value => {
+      smokeVisible = Boolean(value);
+      const tab = window.registeredTabs[0];
+      if (tab) renderWorkbench(tab);
     };
     const fakeCtx = {
       slots: {
