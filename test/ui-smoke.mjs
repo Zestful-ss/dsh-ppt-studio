@@ -95,7 +95,7 @@ const smokePptxPath = join(tempHome, 'smoke-import.pptx');
 const canonicalRoot = join(tempHome, 'dsh-ppt-studio');
 const store = new ProjectStore(canonicalRoot, { legacyDir: join(tempHome, 'projects') });
 // Seed a deterministic deck with stable ids for direct-manipulation checks.
-const initialDeck = await store.create('季度汇报');
+const initialDeck = await store.create('季度汇报', { workspace: tempHome });
 initialDeck.slides[0].elements = [
   { id: 'e_text_edit', type: 'text', x: 120, y: 70, w: 600, h: 70, rotate: 0, text: '直接编辑标题', fontSize: 32, color: '#1f2430', bold: true, align: 'left' },
   { id: 'e_shape_edit', type: 'shape', shape: 'roundRect', x: 120, y: 190, w: 280, h: 100, rotate: 30, fill: '#f3f4f6', stroke: '#d8d8de', strokeWidth: 1, radius: 16, text: '旋转形状', fontSize: 20, color: '#1f2430', align: 'center' },
@@ -104,11 +104,15 @@ initialDeck.slides[0].elements = [
   { id: 'e_scatter_demo', type: 'chart', chartType: 'column', x: 120, y: 370, w: 360, h: 110, rotate: 0, fill: '#ffffff', data: { labels: ['Q1', 'Q2', 'Q3'], series: [{ name: '收入', values: [15, 28, 42] }] } },
 ];
 await store.save(initialDeck, initialDeck.revision, 'op_seed');
+const otherWorkspace = join(tempHome, 'elsewhere');
+const otherDeck = await store.create('其他工作区项目', { workspace: otherWorkspace });
+console.log('PPT_STUDIO_SMOKE_OTHER_PROJECT=' + otherDeck.id);
 console.log('PPT_STUDIO_SMOKE_PROJECT=' + store.path(initialDeck.id));
 console.log('PPT_STUDIO_SMOKE_PROJECT_ID=' + initialDeck.id);
 
 const projectHandler = createHandler({
-  authorizePreset: async sessionId => sessionId === 'ppt-smoke' || sessionId === 'ppt-studio',
+  authorizePreset: async sessionId => sessionId === 'ppt-smoke' || sessionId === 'ppt-studio' || sessionId === 'ppt-other',
+  resolveWorkspace: async sessionId => sessionId === 'ppt-other' ? otherWorkspace : tempHome,
 });
 const saveOps = [];
 let loseNextSave = false;
@@ -303,6 +307,12 @@ const server = http.createServer(async (req, res) => {
           }
         }
       })
+    };
+
+    window.switchSmokeSession = sessionId => {
+      fakeScope.sessionId = sessionId;
+      const tab = window.registeredTabs[0];
+      if (tab) renderWorkbench(tab);
     };
 
     window.__ModuleLoader__ = {
